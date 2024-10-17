@@ -51,13 +51,8 @@ options(dplyr.summarise.inform = F)
 ```
 
 ```{r}
-df <- dataset$table("pisa2012_math")$to_data_frame()
-df<-df[!is.na(df$resp),]
+df <- dataset$table("frac20")$to_data_frame()
 ```
-```{r}
-colnames(df)
-```
-
 
 ## Get CDM data
 ```{r}
@@ -84,7 +79,67 @@ print(length(q_data))
 df.frac20 <- q_data$frac20$to_data_frame()
 ```
 
-# Analysis
+# Convert to Q matrix and data 
+```{r}
+func.convert.Q.data.structure <- function(df){
+  Q <- df %>% 
+    select(-c(id, resp)) %>% 
+    unique() %>% 
+    mutate(item_num = str_extract(item, "\\d+") %>% as.numeric()) %>% 
+    arrange(item_num) %>% 
+    select(-c(item, item_num))
+  
+  dat <- df %>% 
+    mutate(item_num = str_extract(item, "\\d+") %>% as.numeric()) %>% 
+    select(item_num, id, resp) %>% 
+    arrange(id, item_num) %>% 
+    mutate(item = paste0("V",item_num)) %>% 
+    select(-item_num) %>% 
+    pivot_wider(names_from = item, values_from = resp) %>% 
+    select(-id)
+  
+  tables_list <- list()
+  tables_list[['Q']] <- Q
+  tables_list[['dat']] <- dat
+  
+  return (tables_list)
+}
+frac20 <- func.convert.Q.data.structure(df.frac20)
+```
+
+```{r}
+func.convert.Q.data.structure.with.held.out <- function(df){
+  Q <- df %>% 
+    select(-c(id, resp)) %>% 
+    unique() %>% 
+    mutate(item_num = str_extract(item, "\\d+") %>% as.numeric()) %>% 
+    arrange(item_num) %>% 
+    select(-c(item, item_num))
+  
+  df.held.out <- df %>% 
+    mutate(item_num = str_extract(item, "\\d+") %>% as.numeric()) %>% 
+    select(item_num, id, resp) %>% 
+    arrange(id, item_num) %>% 
+    mutate(item = paste0("V",item_num)) %>% 
+    mutate(held_out = rbinom(n = n(), size = 1, prob = 0.2)) 
+  
+  df.dat <- df.held.out %>% 
+    filter(held_out == 0) %>% 
+    select(-c(item_num, held_out)) %>% 
+    pivot_wider(names_from = item, values_from = resp) %>% 
+    select(-id)
+  
+  tables_list <- list()
+  tables_list[['Q']] <- Q
+  tables_list[['dat']] <- df.dat
+  tables_list[['heldout']] <- df.held.out
+  
+  return (tables_list)
+}
+```
+
+
+# Analysis (All data)
 fit DINA model
 ```{r}
 mod.dina <- GDINA(frac20$dat,frac20$Q,model = "DINA")
@@ -93,7 +148,6 @@ mod.dina <- GDINA(frac20$dat,frac20$Q,model = "DINA")
 ```{r}
 coef <- coef(mod.dina, "itemprob")
 
-coef$`Item 1`
 ```
 
 ```{r}
@@ -101,7 +155,7 @@ frac20.q <- frac20$Q %>%
   mutate(item = seq(1, 20, 1))
 
 q_matrix_long <-  frac20.q %>%
-  pivot_longer(cols = starts_with("V"),  # Select columns that represent attributes
+  pivot_longer(cols = starts_with("Qmatrix"),  # Select columns that represent attributes
                names_to = "Attribute",  # Name for the new 'attribute' column
                values_to = "Value") 
 ```
@@ -112,8 +166,6 @@ persons <- as.data.frame(personparm(mod.dina))
 
 #colnames(persons) <- sub("^A", "V", colnames(persons))
 ```
-
-
 
 ```{r}
 name <- paste0("Item", " ", 1)
@@ -176,7 +228,7 @@ func.get.table <- function(num, coef, q_matrix_long) {
     
     # Assign proper column names
     colnames(df) <- c(attributes, "Probability")
-    colnames(df) <- sub("^V", "A", colnames(df))
+    colnames(df) <- sub("^Qmatrix__", "A", colnames(df))
     
     # Store the resulting data frame in the list
     tables_list[[name]] <- df
@@ -191,44 +243,14 @@ table.list <- func.get.table(20, coef, q_matrix_long)
 
 
 ```{r}
-# Assuming table.list$`Item 1` is a matrix or list
-item_1_data <- table.list$`Item 1`
-
-item_1_data
-
-```
-```{r}
-frac20
-```
-```{r}
-item_1_data
-```
-```{r}
-hi <- item_1_data
-hi[[1, 4]]
-tibble(hi)
-frac20.q
-
-```
-```{r}
-n <- length(frac20$dat)
-n
-```
-
-```{r}
-frac20$dat
-```
-
-
-```{r}
-predict.resp <- function(item_prob, persons){
+func.predict.resp <- function(item_prob, persons){
   persons.prediction <- persons %>% 
     left_join(item_prob) 
   return(persons.prediction$Probability)
 }
 
 # want to return a dataframe with column i with "name: Vi"and values shall be the list l
-predict.resp.all.items <- function(frac, item, persons){
+func.predict.resp.all.items <- function(frac, item, persons){
   
   n <- length(frac$dat)
   
@@ -241,7 +263,7 @@ predict.resp.all.items <- function(frac, item, persons){
     
     item_prob <- table.list[[name]]
     
-    l <- predict.resp(item_prob, persons)
+    l <- func.predict.resp(item_prob, persons)
     
     col_name <- paste0("V", i)
     response_list[[col_name]] <- l
@@ -255,164 +277,46 @@ predict.resp.all.items <- function(frac, item, persons){
   return(response_df)
 }
 
-predict.resp.all.items(frac20, table.list, persons)
+predict.matrix <- func.predict.resp.all.items(frac20, table.list, persons)
 ```
-
-
-
-
-# CDM
+# Out-of-sample prediction
+for a given data
 ```{r}
-data(data.fraction1)
-```
-```{r}
-data.fraction1
-```
-```{r}
-data(fraction.subtraction.data, package="CDM")
-data(fraction.subtraction.qmatrix, package="CDM")
-dat <- fraction.subtraction.data
-Q <- fraction.subtraction.qmatrix
-# Model 1: DINA model
-mod1 <- CDM::gdina( dat, q.matrix=Q, rule="DINA")
-summary(mod1)
-# Model 2: HO-DINA model
-mod2 <- CDM::gdina( dat, q.matrix=Q, HOGDINA=1, rule="DINA")
-summary(mod2)
-```
-```{r}
-# DINA Model
-mod1 <- CDM::din( CDM::sim.dina, q.matr=CDM::sim.qmatrix, rule="DINA" )
-summary(mod1)
-# apply predict method
-prmod1 <- CDM::IRT.predict( mod1, sim.dina )
-str(prmod1)
-```
-
-```{r}
-mod1 <- CDM::din( sim.dina, q.matrix=sim.qmatrix )
-summary(mod1)
-IRT.IC(mod1)
-```
-
-```{r}
-Q1 <- diag(3)
-Q2 <- matrix( scan(text="1 1 0 1 0 1 1 1 1 1 1 1"), ncol=3, byrow=TRUE)
-Q <- rbind(Q1, Q2)
-res <- CDM::din_identifiability(q.matrix=Q)
-summary(res)
-```
-
-
-```{r}
-# Load the cdm package
-library(CDM)
-
-# Step 1: Fit the DINA model
-dina_model <- CDM::din(frac20$dat, frac20$Q)
-gdina_model <- CDM::gdina(frac20$dat, frac20$Q)
-
-# Step 2: Estimate ability (attribute profiles)
-ability_estimates <- dina_model$posterior
-
-# Step 3: Predict responses based on estimated abilities and item parameters
-predicted_responses <- predict(dina_model, type = "class")
-
-# View the predicted responses
-#predicted_responses$expected
-```
-
-```{r}
-anova(dina_model, gdina_model)
-```
-```{r}
-gdina_model$coef
-```
-
-```{r}
-coef(gdina_model)
-```
-
-```{r}
-q_matrix
-
-response_data 
-
-ability_estimates
-```
-
-```{r}
-nm <- c("frac20")
-df <- dataset$table(nm)$to_data_frame()
-library(lme4)
-
-##A
-##lme4 style model
-m1<-lmer(resp~0+(1|id)+item,df)
-resp<-irw::long2resp(df)
-resp$id<-NULL
-m1.irt<-mirt::mirt(resp,1,'Rasch')
-
-fe<-fixef(m1)
-names(fe)<-gsub("itemitem","item",names(fe))
-co<-mirt::coef(m1.irt,simplify=TRUE)$items[,2]
-z<-merge(fe,co,by=0)
-plot(z[,-1]) #very stylish!
-abline(0,1) #but they depend on different identification assumptions
-
-##B
-##now let's focus on the Q matrix components
-nms<-paste("Qmatrix__",1:8,sep='')
-fm<-paste("resp~0+(1|id)+",paste(nms,collapse="+"))
-m2<-lmer(as.formula(fm),df)
-
-##C
-##now a CDM approach
-library(GDINA)
-m3 <- GDINA(frac20$dat,frac20$Q,model="DINA") #you'll need to install GDINA
-coef(m3) #these show the probability of a correct response for a given pattern of skills. you can see the A part of DINA in the fact that the probabilities are constant for patterns that are not all 1s
-z<-personparm(m3) #here we have hard calls for whether a person has each of the 8 skills
-##hard to know how to contrast theta estimates and skills but one question we can ask is about the relationship between skill acquisition and ability. 
-##specifically let's look at ability estimates and average number of skills
-th<-ranef(m1)[[1]][,1]
-plot(th,rowSums(z)) 
-
-##now let's take another perspective: what if we modeled having a specific skill as a function of theta
-xl<-range(th)
-plot(NULL,xlim=xl,ylim=0:1,xlab='theta',ylab='Pr(skill=1)')
-for (i in 1:ncol(z)) {
-    m<-glm(z[,i]~th,family='binomial')
-    xx<-seq(xl[1],xl[2],length.out=1000)
-    co<-coef(m)
-    yy<-1/(1+exp(-(co[1]+co[2]*xx)))
-    lines(xx,yy)
+func.run.analysis <- function(df){
+  df.cdm.structure <- func.convert.Q.data.structure.with.held.out(df)
+  
+  mod.dina <- GDINA(df.cdm.structure$dat,df.cdm.structure$Q,model = "DINA")
+  
+  df.cdm.structure.q <- df.cdm.structure$Q %>% 
+    mutate(item = seq(1, 20, 1))
+  
+  q_matrix_long <-  df.cdm.structure.q %>%
+    pivot_longer(cols = starts_with("Qmatrix"),  # Select columns that represent attributes
+               names_to = "Attribute",  # Name for the new 'attribute' column
+               values_to = "Value") 
+  
+  persons <- as.data.frame(personparm(mod.dina))
+  
+  coef <- coef(mod.dina, "itemprob")
+  
+  table.list <- func.get.table(20, coef, q_matrix_long)
+  
+  predict.matrix <- func.predict.resp.all.items(df.cdm.structure, table.list, persons)
+  
+  result <- predict.matrix  %>% 
+    mutate(id = row_number()) %>% 
+    pivot_longer(cols = starts_with("V"), names_to = "item", values_to = "prediction") %>% 
+    left_join(df.cdm.structure$heldout)
+  
+  return(result)
 }
-##What do you make of this figure?
 
-##D
-##fit
-AIC(m1)
-AIC(m2)
-AIC(m3)
+df.frac20 <- q_data$frac20$to_data_frame()
+result <- func.run.analysis(df.frac20)
 ```
-
-# old
+getting a df with original resp and prediction
 ```{r}
-df %>% 
-  group_by(subjid) %>% 
-  tally() %>% 
-  filter(n < 52)
-```
-
-```{r}
-df
-df.summary <- df %>% 
-  group_by(targetword, age_group, source) %>% 
-  summarise(pc = mean(resp), rt = median(rt))
-df.summary
-
-ggplot(df.summary, mapping = aes(x = pc,
-                     y = rt)) +
-  geom_point(alpha=.8) + facet_grid(row = vars(source), col = vars(age_group)) + stat_cor(cor.coef.name = 'r', aes(label = ..r.label..))
+result %>% 
+  filter(held_out == 1)
 ```
 
