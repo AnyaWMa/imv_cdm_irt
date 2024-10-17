@@ -282,6 +282,10 @@ predict.matrix <- func.predict.resp.all.items(frac20, table.list, persons)
 # Out-of-sample prediction
 for a given data
 ```{r}
+set.seed(10)
+```
+
+```{r}
 func.run.analysis <- function(df){
   df.cdm.structure <- func.convert.Q.data.structure.with.held.out(df)
   
@@ -318,5 +322,8 @@ getting a df with original resp and prediction
 ```{r}
 result %>% 
   filter(held_out == 1)
+```
+```{r}
+write.csv(result, "output/frac20_prediction.csv")
 ```
 
