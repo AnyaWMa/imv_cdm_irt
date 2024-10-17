@@ -321,9 +321,12 @@ result <- func.run.analysis(df.frac20)
 getting a df with original resp and prediction
 ```{r}
 result %>% 
-  filter(held_out == 1)
+  filter(held_out == 1) %>% 
+  mutate(yes = ifelse(prediction < 0.5, 0, 1)) %>% 
+  mutate(correct = ifelse(resp == yes, 1, 0)) %>% 
+  group_by(correct) %>% 
+  tally()
 ```
 ```{r}
-write.csv(result, "output/frac20_prediction.csv")
+#write.csv(result, "output/frac20_prediction.csv")
 ```
-
