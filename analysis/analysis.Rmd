@@ -1,0 +1,418 @@
+---
+title: "IRW explore"
+author: "Wanjing Anya Ma"
+date:  "`r Sys.Date()`"
+output:
+  bookdown::html_document2:
+    toc: true
+    toc_depth: 4
+    theme: cosmo
+    highlight: tango
+    
+---
+
+# Data Preprocessing
+## Load Packages
+Let's first load the packages that we need for this chapter. 
+
+```{r, message=FALSE, warning = FALSE, echo = FALSE}
+library("knitr") # for rendering the RMarkdown file
+library("tidyverse") # for data wrangling 
+library(dplyr)
+library(mirt)
+library('ggpubr')
+library(Metrics)
+library(hash)
+library(ggplot2)
+library(GGally)
+library(gridExtra)
+library(rstudioapi)
+library(TAM)
+library(mgcv)
+library(GDINA)
+```
+
+## Load IRW
+```{r}
+#reliability 
+dataset <- redivis::user("datapages")$dataset("item_response_warehouse",version='v7.0')
+
+dataset_tables <- dataset$list_tables()
+```
+
+
+## Settings 
+```{r echo = FALSE}
+# sets how code looks in knitted document
+opts_chunk$set(comment = "")
+
+# suppresses warning about grouping 
+options(dplyr.summarise.inform = F)
+```
+
+```{r}
+df <- dataset$table("pisa2012_math")$to_data_frame()
+df<-df[!is.na(df$resp),]
+```
+```{r}
+colnames(df)
+```
+
+
+## Get CDM data
+```{r}
+##
+print(length(dataset_tables))
+names<-sapply(dataset_tables,function(x) x$name)
+ii<-grep("metadata",names)
+names(dataset_tables)<-names
+if (length(ii)>0) dataset_tables<-dataset_tables[-ii]   
+##
+f<-function(table) table$list_variables()
+nms<-lapply(dataset_tables,f)
+
+##
+f<-function(x) {
+    nm<-sapply(x,function(x) x$name)
+    any(grepl("^Qmat",nm))
+}
+test<-sapply(nms,f)
+q_data<-dataset_tables[test]
+print(length(q_data))
+```
+```{r}
+df.frac20 <- q_data$frac20$to_data_frame()
+```
+
+# Analysis
+fit DINA model
+```{r}
+mod.dina <- GDINA(frac20$dat,frac20$Q,model = "DINA")
+```
+
+```{r}
+coef <- coef(mod.dina, "itemprob")
+
+coef$`Item 1`
+```
+
+```{r}
+frac20.q <- frac20$Q %>% 
+  mutate(item = seq(1, 20, 1))
+
+q_matrix_long <-  frac20.q %>%
+  pivot_longer(cols = starts_with("V"),  # Select columns that represent attributes
+               names_to = "Attribute",  # Name for the new 'attribute' column
+               values_to = "Value") 
+```
+
+get person estimate
+```{r}
+persons <- as.data.frame(personparm(mod.dina))
+
+#colnames(persons) <- sub("^A", "V", colnames(persons))
+```
+
+
+
+```{r}
+name <- paste0("Item", " ", 1)
+df.coef <- as.data.frame(coef[[name]])
+rownames(df.coef)
+```
+
+
+```{r}
+func.get.table <- function(num, coef, q_matrix_long) {
+  # Load necessary library
+  library(dplyr)
+  
+  # Initialize an empty list to store the data frames
+  tables_list <- list()
+  
+  for (i in seq(1, num, 1)) {
+    
+    # Filter the required attributes for the current item from q_matrix_long
+    required_attribute <- q_matrix_long %>%
+      filter(Value == 1, item == i) %>%
+      arrange(Attribute)
+    
+    # Get the attribute names
+    attributes <- required_attribute$Attribute
+    
+    # Create a dynamic name for the current item (e.g., "Item 1", "Item 2", etc.)
+    name <- paste0("Item", " ", i)
+    
+    # Extract the coefficients for the current item and convert to data frame
+    df.coef <- as.data.frame(coef[[name]])
+    
+    # Get the rownames of the coefficient data frame (the patterns)
+    list.combination <- rownames(df.coef)
+    
+    # Function to convert pattern strings (like "P(000)", "P(100)", etc.)
+    convert_pattern <- function(pattern) {
+      # Remove "P(" and ")" to isolate the binary part
+      binary_string <- gsub("[P()]", "", pattern)
+      
+      # Split the binary string into individual characters
+      binary_vector <- as.numeric(unlist(strsplit(binary_string, "")))
+      
+      # Return the binary vector
+      return(binary_vector)
+    }
+    
+    # Extract probabilities and ensure they are numeric
+    possibilities <- as.numeric(df.coef[[1]])
+    
+    # Convert the list.combination patterns to a matrix form
+    attribute_matrix <- do.call(rbind, lapply(list.combination, convert_pattern))
+    
+    # Convert attribute_matrix to a data frame and ensure numeric
+    df <- as.data.frame(attribute_matrix, stringsAsFactors = FALSE)
+    df[] <- lapply(df, as.numeric)  # Coerce all columns to numeric
+    
+    # Add the probabilities as a separate numeric column
+    df$Probability <- possibilities
+    
+    # Assign proper column names
+    colnames(df) <- c(attributes, "Probability")
+    colnames(df) <- sub("^V", "A", colnames(df))
+    
+    # Store the resulting data frame in the list
+    tables_list[[name]] <- df
+    
+  }
+  
+  # Return the list of data frames
+  return(tables_list)
+}
+table.list <- func.get.table(20, coef, q_matrix_long)
+```
+
+
+```{r}
+# Assuming table.list$`Item 1` is a matrix or list
+item_1_data <- table.list$`Item 1`
+
+item_1_data
+
+```
+```{r}
+frac20
+```
+```{r}
+item_1_data
+```
+```{r}
+hi <- item_1_data
+hi[[1, 4]]
+tibble(hi)
+frac20.q
+
+```
+```{r}
+n <- length(frac20$dat)
+n
+```
+
+```{r}
+frac20$dat
+```
+
+
+```{r}
+predict.resp <- function(item_prob, persons){
+  persons.prediction <- persons %>% 
+    left_join(item_prob) 
+  return(persons.prediction$Probability)
+}
+
+# want to return a dataframe with column i with "name: Vi"and values shall be the list l
+predict.resp.all.items <- function(frac, item, persons){
+  
+  n <- length(frac$dat)
+  
+  # Initialize an empty list to store predictions
+  response_list <- list()
+  
+  n <- length(frac$dat)
+  for (i in seq(1, n, 1)) {
+    name <- paste0("Item", " ", i)
+    
+    item_prob <- table.list[[name]]
+    
+    l <- predict.resp(item_prob, persons)
+    
+    col_name <- paste0("V", i)
+    response_list[[col_name]] <- l
+  }
+  response_df <- as.data.frame(response_list, stringsAsFactors = FALSE)
+  
+  # Optionally, add identifiers from 'persons' if needed
+  # For example, if 'persons' has an ID column:
+  # response_df$PersonID <- persons$ID
+  
+  return(response_df)
+}
+
+predict.resp.all.items(frac20, table.list, persons)
+```
+
+
+
+
+# CDM
+```{r}
+data(data.fraction1)
+```
+```{r}
+data.fraction1
+```
+```{r}
+data(fraction.subtraction.data, package="CDM")
+data(fraction.subtraction.qmatrix, package="CDM")
+dat <- fraction.subtraction.data
+Q <- fraction.subtraction.qmatrix
+# Model 1: DINA model
+mod1 <- CDM::gdina( dat, q.matrix=Q, rule="DINA")
+summary(mod1)
+# Model 2: HO-DINA model
+mod2 <- CDM::gdina( dat, q.matrix=Q, HOGDINA=1, rule="DINA")
+summary(mod2)
+```
+```{r}
+# DINA Model
+mod1 <- CDM::din( CDM::sim.dina, q.matr=CDM::sim.qmatrix, rule="DINA" )
+summary(mod1)
+# apply predict method
+prmod1 <- CDM::IRT.predict( mod1, sim.dina )
+str(prmod1)
+```
+
+```{r}
+mod1 <- CDM::din( sim.dina, q.matrix=sim.qmatrix )
+summary(mod1)
+IRT.IC(mod1)
+```
+
+```{r}
+Q1 <- diag(3)
+Q2 <- matrix( scan(text="1 1 0 1 0 1 1 1 1 1 1 1"), ncol=3, byrow=TRUE)
+Q <- rbind(Q1, Q2)
+res <- CDM::din_identifiability(q.matrix=Q)
+summary(res)
+```
+
+
+```{r}
+# Load the cdm package
+library(CDM)
+
+# Step 1: Fit the DINA model
+dina_model <- CDM::din(frac20$dat, frac20$Q)
+gdina_model <- CDM::gdina(frac20$dat, frac20$Q)
+
+# Step 2: Estimate ability (attribute profiles)
+ability_estimates <- dina_model$posterior
+
+# Step 3: Predict responses based on estimated abilities and item parameters
+predicted_responses <- predict(dina_model, type = "class")
+
+# View the predicted responses
+#predicted_responses$expected
+```
+
+```{r}
+anova(dina_model, gdina_model)
+```
+```{r}
+gdina_model$coef
+```
+
+```{r}
+coef(gdina_model)
+```
+
+```{r}
+q_matrix
+
+response_data 
+
+ability_estimates
+```
+
+```{r}
+nm <- c("frac20")
+df <- dataset$table(nm)$to_data_frame()
+library(lme4)
+
+##A
+##lme4 style model
+m1<-lmer(resp~0+(1|id)+item,df)
+resp<-irw::long2resp(df)
+resp$id<-NULL
+m1.irt<-mirt::mirt(resp,1,'Rasch')
+
+fe<-fixef(m1)
+names(fe)<-gsub("itemitem","item",names(fe))
+co<-mirt::coef(m1.irt,simplify=TRUE)$items[,2]
+z<-merge(fe,co,by=0)
+plot(z[,-1]) #very stylish!
+abline(0,1) #but they depend on different identification assumptions
+
+##B
+##now let's focus on the Q matrix components
+nms<-paste("Qmatrix__",1:8,sep='')
+fm<-paste("resp~0+(1|id)+",paste(nms,collapse="+"))
+m2<-lmer(as.formula(fm),df)
+
+##C
+##now a CDM approach
+library(GDINA)
+m3 <- GDINA(frac20$dat,frac20$Q,model="DINA") #you'll need to install GDINA
+coef(m3) #these show the probability of a correct response for a given pattern of skills. you can see the A part of DINA in the fact that the probabilities are constant for patterns that are not all 1s
+z<-personparm(m3) #here we have hard calls for whether a person has each of the 8 skills
+##hard to know how to contrast theta estimates and skills but one question we can ask is about the relationship between skill acquisition and ability. 
+##specifically let's look at ability estimates and average number of skills
+th<-ranef(m1)[[1]][,1]
+plot(th,rowSums(z)) 
+
+##now let's take another perspective: what if we modeled having a specific skill as a function of theta
+xl<-range(th)
+plot(NULL,xlim=xl,ylim=0:1,xlab='theta',ylab='Pr(skill=1)')
+for (i in 1:ncol(z)) {
+    m<-glm(z[,i]~th,family='binomial')
+    xx<-seq(xl[1],xl[2],length.out=1000)
+    co<-coef(m)
+    yy<-1/(1+exp(-(co[1]+co[2]*xx)))
+    lines(xx,yy)
+}
+##What do you make of this figure?
+
+##D
+##fit
+AIC(m1)
+AIC(m2)
+AIC(m3)
+```
+
+# old
+```{r}
+df %>% 
+  group_by(subjid) %>% 
+  tally() %>% 
+  filter(n < 52)
+```
+
+```{r}
+df
+df.summary <- df %>% 
+  group_by(targetword, age_group, source) %>% 
+  summarise(pc = mean(resp), rt = median(rt))
+df.summary
+
+ggplot(df.summary, mapping = aes(x = pc,
+                     y = rt)) +
+  geom_point(alpha=.8) + facet_grid(row = vars(source), col = vars(age_group)) + stat_cor(cor.coef.name = 'r', aes(label = ..r.label..))
+```
+
