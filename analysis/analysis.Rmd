@@ -78,6 +78,39 @@ print(length(q_data))
 ```{r}
 df.frac20 <- q_data$frac20$to_data_frame()
 ```
+# helper functions 
+
+```{r}
+imv.binary<-function(y, #outcomes
+                     p1,#baseline
+                     p2 #enhanced
+                     ) {
+    ##
+    ll<-function(x,p) {
+        z<-log(p)*x+log(1-p)*(1-x)
+        z<-sum(z)/length(x)
+        exp(z)
+    }    
+    loglik1<-ll(y,p1)
+    loglik2<-ll(y,p2)
+    getcoins<-function(a) {
+        f<-function(p,a) abs(p*log(p)+(1-p)*log(1-p)-log(a))
+        nlminb(.5,f,lower=0.001,upper=.999,a=a)$par
+    }
+    c1<-getcoins(loglik1)
+    c2<-getcoins(loglik2)
+    ew<-function(p1,p0) (p1-p0)/p0
+    imv<-ew(c2,c1)
+    imv
+}
+```
+
+```{r}
+prob.irt <-function(a, b,theta) {
+  1 / (1 + exp(-a * (theta - b)))
+  
+}
+```
 
 # Convert to Q matrix and data 
 ```{r}
@@ -92,11 +125,10 @@ func.convert.Q.data.structure <- function(df){
   dat <- df %>% 
     mutate(item_num = str_extract(item, "\\d+") %>% as.numeric()) %>% 
     select(item_num, id, resp) %>% 
-    arrange(id, item_num) %>% 
+    arrange(item_num) %>% 
     mutate(item = paste0("V",item_num)) %>% 
     select(-item_num) %>% 
-    pivot_wider(names_from = item, values_from = resp) %>% 
-    select(-id)
+    pivot_wider(names_from = item, values_from = resp) 
   
   tables_list <- list()
   tables_list[['Q']] <- Q
@@ -119,15 +151,14 @@ func.convert.Q.data.structure.with.held.out <- function(df){
   df.held.out <- df %>% 
     mutate(item_num = str_extract(item, "\\d+") %>% as.numeric()) %>% 
     select(item_num, id, resp) %>% 
-    arrange(id, item_num) %>% 
+    arrange(item_num) %>% 
     mutate(item = paste0("V",item_num)) %>% 
     mutate(held_out = rbinom(n = n(), size = 1, prob = 0.2)) 
   
   df.dat <- df.held.out %>% 
     filter(held_out == 0) %>% 
     select(-c(item_num, held_out)) %>% 
-    pivot_wider(names_from = item, values_from = resp) %>% 
-    select(-id)
+    pivot_wider(names_from = item, values_from = resp) 
   
   tables_list <- list()
   tables_list[['Q']] <- Q
@@ -138,9 +169,18 @@ func.convert.Q.data.structure.with.held.out <- function(df){
 }
 ```
 
+# next steps: 
+plan: try other models 
+simulation data: simulation data from DINA 
+use frac20 Q matrix, simulate new data 
+simulate data from profile 
+under situations 
+skill heirachy 
+
 
 # Analysis (All data)
 fit DINA model
+
 ```{r}
 mod.dina <- GDINA(frac20$dat,frac20$Q,model = "DINA")
 ```
@@ -251,13 +291,12 @@ func.predict.resp <- function(item_prob, persons){
 
 # want to return a dataframe with column i with "name: Vi"and values shall be the list l
 func.predict.resp.all.items <- function(frac, item, persons){
-  
-  n <- length(frac$dat)
+
   
   # Initialize an empty list to store predictions
   response_list <- list()
   
-  n <- length(frac$dat)
+  n <- length(frac$dat) -1
   for (i in seq(1, n, 1)) {
     name <- paste0("Item", " ", i)
     
@@ -284,13 +323,13 @@ for a given data
 ```{r}
 set.seed(10)
 ```
-
 ```{r}
 func.run.analysis <- function(df){
   df.cdm.structure <- func.convert.Q.data.structure.with.held.out(df)
+  df.resp.with.id <- df.cdm.structure$dat %>% arrange(id) %>% select(-id)
+  mod.dina <- GDINA(df.resp.with.id,df.cdm.structure$Q,model = "DINA")
   
-  mod.dina <- GDINA(df.cdm.structure$dat,df.cdm.structure$Q,model = "DINA")
-  
+  # CDM model
   df.cdm.structure.q <- df.cdm.structure$Q %>% 
     mutate(item = seq(1, 20, 1))
   
@@ -309,24 +348,64 @@ func.run.analysis <- function(df){
   
   result <- predict.matrix  %>% 
     mutate(id = row_number()) %>% 
-    pivot_longer(cols = starts_with("V"), names_to = "item", values_to = "prediction") %>% 
+    pivot_longer(cols = starts_with("V"), names_to = "item", values_to = "prediction.cdm") %>% 
     left_join(df.cdm.structure$heldout)
   
-  return(result)
+  # 1PL model
+  mod.Rasch <- mirt(df.cdm.structure$dat %>% select(-id), 1, itemtype = "Rasch")
+  
+  thetas <- as.data.frame(fscores(mod.Rasch))
+  
+  params <- data.frame(coef(mod.Rasch, IRTpars = TRUE, simplify = TRUE))
+  
+  result.2 <- df.cdm.structure$dat %>% 
+    add_column(th = thetas$F1) %>% 
+    select(id, th) %>% 
+    left_join(df.cdm.structure$heldout) %>% 
+    left_join(rownames_to_column(params, var = "item")) %>% 
+    mutate(prediction.1PL = prob.irt(items.a, items.b, th)) %>% 
+    select(id, item_num, item, resp, held_out, prediction.1PL)
+  
+  result.compared <- result %>% left_join(result.2)
+  
+  df.test <- result.compared %>% 
+    filter(held_out == 1)
+  
+  print(imv.binary(df.test$resp, df.test$prediction.1PL, df.test$prediction.cdm))
+  
+  return (result.compared)
 }
-
-df.frac20 <- q_data$frac20$to_data_frame()
-result <- func.run.analysis(df.frac20)
 ```
-getting a df with original resp and prediction
+```{r}
+df.frac20 <- q_data$frac20$to_data_frame()
+```
+
+```{r}
+for (i in seq(1, 5, 1)){
+  print(i)
+  result <- func.run.analysis(df.frac20)
+}
+```
 ```{r}
 result %>% 
-  filter(held_out == 1) %>% 
-  mutate(yes = ifelse(prediction < 0.5, 0, 1)) %>% 
-  mutate(correct = ifelse(resp == yes, 1, 0)) %>% 
-  group_by(correct) %>% 
-  tally()
+  filter(prediction.cdm == 0)
 ```
+
+```{r}
+ggplot(result %>% filter(item == "V3"), mapping = aes(x = prediction.1PL,
+                     y = prediction.cdm)) + geom_smooth(method = "lm")  + stat_cor() + geom_point() 
+```
+
+```{r}
+df.test <- result %>% 
+  filter(held_out == 1)
+```
+
+```{r}
+imv.binary(df.test$resp, df.test$prediction.1PL, df.test$prediction.cdm)
+```
+
+
 ```{r}
 #write.csv(result, "output/frac20_prediction.csv")
 ```
