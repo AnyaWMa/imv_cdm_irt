@@ -47,6 +47,7 @@ library(rstudioapi)
 library(TAM)
 library(mgcv)
 library(GDINA)
+library(MASS)
 ```
 
 ```{r echo = FALSE}
@@ -162,7 +163,7 @@ func.convert.Q.data.structure <- function(df){
     unique() %>% 
     mutate(item_num = str_extract(item, "\\d+") %>% as.numeric()) %>% 
     arrange(item_num) %>% 
-     dplyr ::(-c(item, item_num))
+     dplyr ::select(-c(item, item_num))
   
   dat <- df %>% 
     mutate(item_num = str_extract(item, "\\d+") %>% as.numeric()) %>% 
@@ -215,6 +216,41 @@ func.convert.Q.data.structure.with.held.out <- function(df, heldout_rate){
 }
 ```
 
+```{r}
+func.convert.Q.data.structure.with.held.out.limited.skills <- function(df, heldout_rate, limited_skills){
+  Q <- df %>% 
+     dplyr ::select(-c(id, resp)) %>% 
+    unique() %>% 
+    mutate(item_num = str_extract(item, "\\d+") %>% as.numeric()) %>% 
+     dplyr ::arrange(item_num) %>% 
+     dplyr ::select(-c(item, item_num))
+  
+  df.held.out <- df %>% 
+    mutate(item_num = str_extract(item, "\\d+") %>% as.numeric()) %>% 
+     dplyr ::select(item_num, id, resp) %>% 
+    dplyr :: arrange(item_num) %>% 
+    mutate(item = paste0("V",item_num)) %>% 
+    mutate(held_out = rbinom(n = n(), size = 1, prob = heldout_rate)) %>% 
+     dplyr ::arrange(id)
+  
+  df.dat <- df.held.out %>% 
+    filter(held_out == 0) %>% 
+    arrange(item_num) %>% 
+     dplyr ::select(-c(item_num, held_out)) %>%
+    pivot_wider(names_from = item, values_from = resp) %>% 
+     dplyr ::arrange(id) 
+  
+  filtered_df <- df.dat[rowSums(is.na(df.dat)) <= limited_skills, ]
+  
+  tables_list <- list()
+  tables_list[['Q']] <- Q
+  tables_list[['dat']] <- filtered_df %>%  dplyr ::select(-id)
+  tables_list[['heldout']] <- df.held.out
+  tables_list[['id']] <- filtered_df$id
+  
+  return (tables_list)
+}
+```
 
 ```{r}
 func.get.table <- function(num, coef, q_matrix_long) {
@@ -382,11 +418,9 @@ gs <- coef(mod.dina, "gs")
 
 ```{r}
 sim <- simGDINA(N,Q,gs.parm = gs,model = "DINA",gs.args=list(mono.constraint=TRUE))
-```
-```{r}
+
 dat <- extract(sim,what = "dat")
-```
-```{r}
+
 df.sim.resp.long <- as.data.frame(dat) %>% 
   add_column(id = seq(1, 536, 1)) %>% 
   pivot_longer(cols = -id,               # Specify all columns except pid to pivot
@@ -407,9 +441,9 @@ for a given data
 set.seed(10)
 ```
 ```{r}
-func.run.analysis <- function(df, cdm_model, heldout_rate){
+func.run.analysis <- function(df, cdm_model, heldout_rate, limited_skills){
   n_items = n_distinct(df$item)
-  df.cdm.structure <- func.convert.Q.data.structure.with.held.out(df, heldout_rate)
+  df.cdm.structure <- func.convert.Q.data.structure.with.held.out.limited.skills(df, heldout_rate, limited_skills)
   #df.resp.without.id <- df.cdm.structure$dat %>% arrange(id) %>% select(-id)
   mod.dina <- GDINA(df.cdm.structure$dat,df.cdm.structure$Q,model = cdm_model)
   
@@ -445,6 +479,7 @@ func.run.analysis <- function(df, cdm_model, heldout_rate){
   
   params <- data.frame(coef(mod.Rasch, IRTpars = TRUE, simplify = TRUE))
   
+  
   result.2 <- tibble(th = thetas$F1, id = df.cdm.structure$id) %>%
     left_join(df.cdm.structure$heldout) %>% 
     left_join(rownames_to_column(params, var = "item")) %>% 
@@ -467,37 +502,43 @@ func.run.analysis <- function(df, cdm_model, heldout_rate){
   result.compared <- result %>% 
     left_join(result.2) 
   
-  df.test <- result.compared %>% filter(held_out == 1)
+  df.test <- result.compared %>% filter(held_out == 1) %>% 
+    filter(!is.na(prediction.1PL), !is.na(prediction.cdm))
   
-  imv = imv.binary(df.test$resp, df.test$prediction.1PL, df.test$prediction.cdm)
-  
-  return (imv)
+  imv <- imv.binary(df.test$resp, df.test$prediction.1PL, df.test$prediction.cdm)
+  print(imv)
+  return (df.test)
+  #return (imv)
 }
 ```
 
 ```{r}
-df.frac20.real <- q_data$frac20$to_data_frame()
+df <- q_data$frac20$to_data_frame()
 ```
 
 ```{r}
-list.result <- c()
+#list.result <- c()
 for (i in seq(1, 5, 1)){
-  result <- func.run.analysis(df, "DINA", 0.2)
-  list.result <- c(list.result, result)
+  result <- func.run.analysis(df, "DINA", 0.2, 9)
+  #list.result <- c(list.result, result)
 }
-mean(list.result)
-sd(list.result)
 ```
 
 
 ```{r}
-list.result <- c()
+# list.result <- c()
+# for (i in seq(1, 5, 1)){
+#   result <- func.run.analysis(df.sim.resp, "DINA", 0.2)
+#   list.result <- c(list.result, result)
+# }
+# mean(list.result)
+# sd(list.result)
+```
+```{r}
 for (i in seq(1, 5, 1)){
-  result <- func.run.analysis(df.sim.resp, "DINA", 0.2)
-  list.result <- c(list.result, result)
+  result <- func.run.analysis(df.sim.resp, "DINA", 0.2, 9)
+  #list.result <- c(list.result, result)
 }
-mean(list.result)
-sd(list.result)
 ```
 
 ```{r}
@@ -516,9 +557,7 @@ my claim is that when r~1, IMV(1pl,CDM) should be <=0. in that case, the 1PL sho
 
 when we have r=0 or r<0, that is when IMV(1pl,CDM)>0 because now the structure is skills is not going to be something that a unidmensional theta model can approximate.
 ```{r}
-inv_logit<-function(x) {
-  return (exp(x)/(1+exp(x)))
-}
+logit<-function(x,a=1.7) 1/(1+exp(-a*x))
 
 func.create.response <- function(b, th, np, ni) {
   th.mat<-matrix(th,np,ni,byrow=FALSE) 
@@ -576,27 +615,106 @@ df.create.sim.resp <- function(r, np){
 
 ## when r == 1
 ```{r}
-list.result <- c()
+#list.result <- c()
 df.sim <- df.create.sim.resp(1, 1000)
 for (i in seq(1, 10, 1)){
-  result <- func.run.analysis(df.sim, "DINA", 0.1)
-  list.result <- c(list.result, result)
+  result <- func.run.analysis(df.sim, "DINA", 0.2, 3)
+  #list.result <- c(list.result, result)
 }
-mean(list.result)
-sd(list.result)
+#mean(list.result)
+#sd(list.result)
 ```
+
 
 ## when r == 0
 ```{r}
-list.result <- c()
+#list.result <- c()
 df.sim <- df.create.sim.resp(0, 1000)
 for (i in seq(1, 10, 1)){
-  result <- func.run.analysis(df.sim, "DINA", 0.1)
-  list.result <- c(list.result, result)
+  result <- func.run.analysis(df.sim, "DINA", 0.2, 3)
+  #list.result <- c(list.result, result)
 }
-mean(list.result)
-sd(list.result)
+#mean(list.result)
+#sd(list.result)
 ```
 
 
+# Ben's method
+
+```{r}
+N<-1000
+r<- -0.5
+##theta
+th<-mvrnorm(N,mu=rep(0,2),Sigma=matrix(c(1,r,r,1),2,2))
+
+##skills
+logit<-function(x,a=1.7) 1/(1+exp(-a*x))
+s1<-rbinom(N,1,logit(th[,1]+1))
+s2<-rbinom(N,1,logit(th[,1]-1))
+s3<-rbinom(N,1,logit(th[,2]+1))
+s4<-rbinom(N,1,logit(th[,2]-1))
+sk<-cbind(s1,s2,s3,s4)
+
+##qmatrix
+qm<-matrix(
+    c(1,0,0,0,
+      1,1,0,0,
+      0,0,1,0,
+      0,0,1,1
+      ),4,4,byrow=TRUE)
+
+##response probabilities for with g=s=0.1
+g<-s<-0.1
+    
+resp<-list()
+for (i in 1:nrow(qm)) {
+    ii<-which(qm[i,]==1)
+    z<-sk[,ii,drop=FALSE]
+    rm<-rowMeans(z)
+    p<-ifelse(rm==1,1-s,g)
+    resp[[i]]<-rbinom(N,1,p)
+}
+resp<-do.call("cbind",resp)
+
+```
+
+```{r}
+new_names <- c("item_1", "item_2", "item_3", "item_4")
+
+skill_names <- c("Qmatrix__1", "Qmatrix__2", "Qmatrix__3", "Qmatrix__4")
+
+df.sim <- as.data.frame(resp) %>% 
+  set_names(new_names) %>% 
+  add_column(id = seq(1, N, 1)) %>% 
+  pivot_longer(cols = c(item_1, item_2, item_3, item_4), names_to = "item", values_to = "resp") %>% 
+  left_join(as.data.frame(qm) %>% 
+  set_names(skill_names) %>% 
+  add_column(item = new_names))%>% 
+  relocate(item, id)
+```
+
+
+
+
+```{r}
+#list.result <- c()
+for (i in seq(1, 4, 1)){
+  result <- func.run.analysis(df.sim, "DINA", 0.2, 2)
+  #list.result <- c(list.result, result)
+}
+#mean(list.result)
+#sd(list.result)
+```
+```{r}
+#list.result <- c()
+for (i in seq(1, 4, 1)){
+  result <- func.run.analysis(df.sim, "DINA", 0.2, 2)
+  #list.result <- c(list.result, result)
+}
+#mean(list.result)
+#sd(list.result)
+```
+```{r}
+result
+```
 
