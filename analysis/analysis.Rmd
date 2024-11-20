@@ -724,13 +724,13 @@ sk<-rbinom(4*N,1,.5)
 sk<-matrix(sk,nrow=N,ncol=4)
 
 ##qmatrix
-qm<-matrix(
+qm<-matrix(                                                                                      
     c(1,0,0,0,
       1,1,0,0,
       0,0,1,0,
       0,0,1,1
       ),4,4,byrow=TRUE)
-
+;;
 ##response probabilities for with g=s=0.1
 g<-s<-0.1
     
@@ -799,6 +799,9 @@ for (i in 1:nrow(qm)) {
 }
 resp<-do.call("cbind",resp)
 ```
+```{r}
+qm
+```
 
 ```{r}
 new_names <- c("item_1", "item_2", "item_3", "item_4")
@@ -824,4 +827,218 @@ for (i in seq(1, 4, 1)){
 #sd(list.result)
 ```
 
+true probabilty
+rasch 
+cdm 
+
+# new
+```{r}
+N<-1000
+
+##skills
+sk<-rbinom(4*N,1,.5)
+sk<-matrix(sk,nrow=N,ncol=4)
+
+##qmatrix
+qm<-matrix(
+    c(1,0,0,0,0
+      0,1,0,0,0
+      0,0,1,0,0
+      0,0,0,1,0
+      ),4,4,byrow=TRUE)
+
+qm<-diag(4)
+
+##response probabilities for with g=s=0.1
+g<-s<-0.1
+    
+resp<-list()
+for (i in 1:nrow(qm)) {
+    ii<-which(qm[i,]==1)
+    z<-sk[,ii,drop=FALSE]
+    rm<-rowMeans(z)
+    p<-ifelse(rm==1,1-s,g)
+    resp[[i]]<-rbinom(N,1,p)
+}
+resp<-do.call("cbind",resp)
+```
+
+```{r}
+##skills
+sk<-rbinom(5*N,1,.5)
+sk<-matrix(sk,nrow=N,ncol=5)
+
+cor(sk[, 1], sk[, 5])
+```
+
+
+```{r}
+N <- 1000
+sk<-rbinom(5*N,1,.5)
+sk<-matrix(sk,nrow=N,ncol=5)
+matrix1 <- diag(1, nrow = 5, ncol = 5)
+
+##response probabilities for with g=s=0.1
+g<-s<-0.1
+    
+resp<-list()
+for (i in 1:nrow(matrix1)) {
+    ii<-which(matrix1[i,]==1)
+    z<-sk[,ii,drop=FALSE]
+    rm<-rowMeans(z)
+    p<-ifelse(rm==1,1-s,g)
+    resp[[i]]<-rbinom(N,1,p)
+}
+
+resp_matrix <- do.call(cbind, resp)
+
+# Convert the matrix into a data frame
+resp_df <- as.data.frame(resp_matrix)
+```
+
+
+# NEW METHOD
+
+
+```{r}
+N <- 1000  # Number of people
+K <- 5     # Number of skills
+
+# Generate uncorrelated Bernoulli random variables (skills)
+# Assume probability of success for each skill is 0.5
+sk <- matrix(rbinom(N * K, size = 1, prob = 0.5), nrow = N, ncol = K)
+
+# Initialize parameters
+#N <- 1000
+#sk <- rbinom(5 * N, 1, 0.5)
+#sk <- matrix(sk, nrow = N, ncol = 5)
+matrix1 <- diag(1, nrow = 5, ncol = 5)
+
+qm <- rbind(matrix1, matrix1, matrix1)
+
+# Define function to generate response probabilities for a given g and s
+
+generate_resp <- function(g, s, sk, matrix1, N) {
+  resp <- list()
+  p_matrix <- list()
+  for (i in 1:nrow(matrix1)) {
+    ii <- which(matrix1[i, ] == 1)
+    z <- sk[, ii, drop = FALSE]
+    rm <- rowMeans(z)
+    p <- ifelse(rm == 1, 1 - s, g)
+    p_matrix[[i]] <- p
+    resp[[i]] <- rbinom(N, 1, p)
+  }
+  
+  tables_list <- list()
+  tables_list[['resp']] <- do.call(cbind, resp)
+  tables_list[['p_matrix']] <- do.call(cbind, p_matrix)
+  
+  return(tables_list)
+}
+
+# Generate responses for different g and s values
+result_1 <- generate_resp(0.1, 0.1, sk, matrix1, N)
+result_2 <- generate_resp(0.2, 0.2, sk, matrix1, N)
+result_3 <- generate_resp(0.3, 0.3, sk, matrix1, N)
+
+# Combine all responses into a single matrix
+resp_matrix <- cbind(result_1$resp, result_3$resp, result_3$resp)
+
+p_matrix <- cbind(result_1$p_matrix, result_2$p_matrix, result_3$p_matrix)
+
+# Convert to data frame and assign column names
+resp_df <- as.data.frame(resp_matrix)
+colnames(resp_df) <- paste0("item_", seq_len(ncol(resp_df)))
+
+# Print the resulting data frame
+resp <- resp_df %>% 
+  add_column(id = seq(1, N, 1))
+
+df.p.true <- as.data.frame(p_matrix) %>% 
+  add_column(id = seq(1, N, 1)) %>% 
+  pivot_longer(cols = -id, names_to = "item", values_to = "p") #%>% 
+  #mutate(item = paste0("item_", substring(item, 2, ))) 
+
+
+skill_names <- c("Qmatrix__1", "Qmatrix__2", "Qmatrix__3", "Qmatrix__4", "Qmatrix__5")
+
+df.sim <- resp %>% 
+  pivot_longer(cols = -id, names_to = "item", values_to = "resp") %>%
+  left_join(as.data.frame(qm) %>%
+  set_names(skill_names) %>% mutate(item = paste0("item_", seq_len(nrow(qm)))))
+
+
+func.run.analysis.new <- function(df, cdm_model, heldout_rate, limited_skills){
+  n_items = n_distinct(df$item)
+  df.cdm.structure <- func.convert.Q.data.structure.with.held.out.limited.skills(df, heldout_rate, limited_skills)
+  #df.resp.without.id <- df.cdm.structure$dat %>% arrange(id) %>% select(-id)
+  mod.dina <- GDINA(df.cdm.structure$dat,df.cdm.structure$Q,model = cdm_model)
+  
+  
+  # CDM model
+  df.cdm.structure.q <- df.cdm.structure$Q %>% 
+    mutate(item = seq(1, n_items, 1))
+  
+  q_matrix_long <-  df.cdm.structure.q %>%
+    pivot_longer(cols = starts_with("Qmatrix"),  # Select columns that represent attributes
+               names_to = "Attribute",  # Name for the new 'attribute' column
+               values_to = "Value") 
+  
+  persons.with.id <- as.data.frame(personparm(mod.dina)) %>% 
+    mutate(id = df.cdm.structure$id)
+  
+  coef <- coef(mod.dina, "itemprob")
+  
+  table.list <- func.get.table(n_items, coef, q_matrix_long)
+
+  predict.matrix <- func.predict.resp.all.items(df.cdm.structure, table.list, persons.with.id, table.list)
+  
+  result <- predict.matrix  %>% 
+    mutate(id = row_number()) %>% 
+    pivot_longer(cols = starts_with("V"), names_to = "item", values_to = "prediction.cdm") %>% 
+    left_join(df.cdm.structure$heldout)
+ 
+  # 1PL model
+  mod.Rasch <- mirt(df.cdm.structure$dat, 1, itemtype = "Rasch")
+  
+  thetas <- as.data.frame(fscores(mod.Rasch))
+  
+  params <- data.frame(coef(mod.Rasch, IRTpars = TRUE, simplify = TRUE))
+  
+  
+  result.2 <- tibble(th = thetas$F1, id = df.cdm.structure$id) %>%
+    left_join(df.cdm.structure$heldout) %>% 
+    left_join(rownames_to_column(params, var = "item")) %>% 
+    mutate(prediction.1PL = prob.irt(items.a, items.b, th)) %>% 
+     dplyr ::select(id, item_num, item, resp, held_out, prediction.1PL)
+  
+  # 2PL model
+  # mod.2PL <- mirt(df.cdm.structure$dat, 1, itemtype = "2PL")
+  # 
+  # thetas <- as.data.frame(fscores(mod.2PL))
+  # 
+  # params <- data.frame(coef(mod.2PL, IRTpars = TRUE, simplify = TRUE))
+  # 
+  # result.3 <- tibble(th = thetas$F1, id = df.cdm.structure$id) %>%
+  #   left_join(df.cdm.structure$heldout) %>% 
+  #   left_join(rownames_to_column(params, var = "item")) %>% 
+  #   mutate(prediction.2PL = prob.irt(items.a, items.b, th)) %>% 
+  #   select(id, item_num, item, resp, held_out, prediction.2PL)
+  
+  result.compared <- result %>% 
+    left_join(result.2) 
+  
+  
+  return (result.compared)
+  #return (imv)
+}
+
+df.prediction <- func.run.analysis.new(df.sim, "DINA", 0, 5)
+
+df.prediction %>% 
+  left_join(df.p.true) %>% 
+  mutate(diff.cdm = abs(prediction.cdm-p), diff.1PL = abs(prediction.1PL - p)) %>% 
+  summarise(mean(diff.cdm), mean(diff.1PL))
+```
 
