@@ -9,7 +9,7 @@ sk<-matrix(sk,nrow=N,ncol=5)
 ##qmatrix
 qm<-diag(5)
 qm0<-rbind(qm,qm,qm)
-##response probabilities for with g=s=0.1
+##response probabilities 
 pL<-respL<-list()
 for (j in 1:3) {
     p<-resp<-list()
