@@ -898,8 +898,6 @@ resp_df <- as.data.frame(resp_matrix)
 
 
 # NEW METHOD
-
-
 ```{r}
 N <- 1000  # Number of people
 K <- 5     # Number of skills
@@ -1040,5 +1038,19 @@ df.prediction %>%
   left_join(df.p.true) %>% 
   mutate(diff.cdm = abs(prediction.cdm-p), diff.1PL = abs(prediction.1PL - p)) %>% 
   summarise(mean(diff.cdm), mean(diff.1PL))
+```
+
+# Ben's code
+
+```{r}
+hi <- df.prediction %>% 
+  left_join(df.p.true)
+```
+
+```{r}
+cor(hi$p, hi$prediction.cdm)
+```
+```{r}
+cor(hi$p, hi$prediction.1PL)
 ```
 
