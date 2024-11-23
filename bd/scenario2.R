@@ -23,12 +23,11 @@ irt.sim<-function(a,N=1000) {
     p<-outer(b,sk,'-')
     p<-apply(p,2,function(x) 1/(1+exp(-a*x)))
     qm<-p
-    S<-0
-        while (S==0) {
-            for (i in 1:nrow(qm)) qm[i,]<-rbinom(ncol(qm),1,p[i,])
-            S<-any(c(colMeans(qm),rowMeans(qm))==0)
-        }            
-    }         
+    S<-TRUE
+    while (S) {
+        for (i in 1:nrow(qm)) qm[i,]<-rbinom(ncol(qm),1,p[i,])
+        S<-any(c(colMeans(qm),rowMeans(qm))==0)
+    }            
     
     p.irt<-irt.pr(resp)
     p.cdm<-cdm.pr(resp,qm)
@@ -43,7 +42,7 @@ irt.sim<-function(a,N=1000) {
     list(t=true,om=om)
 }
 
-a<-rep(3,4) #sort(runif(100,min=.5,max=2))
+a<-sort(runif(100,min=.1,max=2))
 library(parallel)
 L<-mclapply(a,irt.sim,mc.cores=10)
 
