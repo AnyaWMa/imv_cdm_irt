@@ -6,7 +6,7 @@ source("00funs.R")
 
 irt.sim<-function(a,N=1000) {
     th<-rnorm(N)
-    b<-sort(rnorm(50))
+    b<-sort(rnorm(50,sd=.3))
     th.mat<-matrix(th,length(th),length(b),byrow=FALSE)
     b.mat<-matrix(b,length(th),length(b),byrow=TRUE)
     k<-th.mat-b.mat
@@ -60,15 +60,15 @@ par(mgp=c(2,1,0),mfrow=c(1,2),mar=c(3,3,1,1),oma=rep(.5,4))
 ##
 irt<-tr[,1]
 cdm<-tr[,2]
-plot(NULL,xlim=c(-1,1),ylim=0:1,xlab=expression(rho),ylab='r(true,est)')
+plot(NULL,xlim=c(0,2),ylim=0:1,xlab='a',ylab='r(true,est)')
 pf<-function(x,y,...) {
     m<-loess(y~x)
     lines(x,predict(m),...,lwd=2)
 }
-lines(pf(rs,irt))
-lines(pf(rs,cdm,col='red'))
+lines(pf(a,irt))
+lines(pf(a,cdm,col='red'))
 legend("bottomright",bty='n',fill=c("black","red"),c("irt","cdm"),title="est")
 ##
-plot(NULL,xlim=c(-1,1),ylim=c(0,.25),xlab=expression(rho),ylab='IMV(IRT,CDM)')
-lines(pf(rs,om))
+plot(NULL,xlim=c(0,2.5),ylim=c(-.25,0),xlab='a',ylab='IMV(IRT,CDM)')
+lines(pf(a,om))
 #dev.off()

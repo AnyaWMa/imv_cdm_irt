@@ -60,7 +60,7 @@ out2<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5)
 #out<-list(out1=out1,out2=out2)
 #save(out,"scenario1.Rdata")
 
-#pdf("/home/bdomingu/Dropbox/Apps/Overleaf/CDM_predictions/scenario1.pdf",width=6,height=3)
+pdf("/home/bdomingu/Dropbox/Apps/Overleaf/CDM_predictions/scenario1.pdf",width=6,height=3)
 par(mgp=c(2,1,0),mfrow=c(1,2),mar=c(3,3,1,1),oma=rep(.5,4))
 ####
 plot(NULL,xlim=c(0,3),ylim=c(0,1),xlab='a',ylab='cor(true,est)')
@@ -81,7 +81,7 @@ f(out2,lty=2)
 legend("bottomright",bty='n',fill=c("black","red"),c("irt","cdm"),title="est")
 
 #####
-plot(NULL,xlim=c(0,3),ylab="IMV",xlab='a',ylim=c(-.05,.15))
+plot(NULL,xlim=c(0,3),ylab="IMV",xlab='a',ylim=c(-.075,.1))
 f<-function(out,...) {
     om<-lapply(out,function(x) x$om)
     df<-data.frame(a=a,om=unlist(om))
@@ -95,6 +95,5 @@ f<-function(out,...) {
 f(out1,lty=1)
 f(out2,lty=2)
 legend("topright",bty='n',lwd=1,lty=c(1,2),title=expression(delta),legend=c(0,1.5))
-
 ##
-#dev.off()
+dev.off()
