@@ -2,7 +2,7 @@ irt.pr<-function(resp,modeltype='Rasch',th.type='EAP') {
     ##get irt pvalues
     library(mirt)
     m<-mirt(resp,1,modeltype)
-    th<-fscores(m)
+    th<-fscores(m,,method=th.type)
     co<-coef(m,IRTpars=TRUE,simplify=TRUE)$items
     x<-list()
     for (i in 1:nrow(co)) {
@@ -12,15 +12,15 @@ irt.pr<-function(resp,modeltype='Rasch',th.type='EAP') {
     do.call("cbind",x)
 }
 
-cdm.pr<-function(resp,qm0,modeltype="DINA") {
+cdm.pr<-function(resp,qm,modeltype="DINA") {
     ##cdm pvalues
     library(GDINA)
-    m <- GDINA(resp,qm0,model=modeltype)
-    map <- personparm(m, what = "EAP")[,1:ncol(qm0)]
+    m <- GDINA(resp,qm,model=modeltype)
+    map <- personparm(m, what = "EAP")[,1:ncol(qm)]
     gs<-coef(m,what='gs')
     p<-list()
-    for (i in 1:nrow(qm0)) {
-        ii<-which(qm0[i,]==1)
+    for (i in 1:nrow(qm)) {
+        ii<-which(qm[i,]==1)
         z<-map[,ii,drop=FALSE]
         rm<-rowMeans(z)
         p[[i]]<-ifelse(rm==1,1-gs[i,2],gs[i,1])
@@ -28,7 +28,7 @@ cdm.pr<-function(resp,qm0,modeltype="DINA") {
     p.cdm<-do.call("cbind",p)
 }
 
-oos.compare<-function(resp,qm0,nfolds) {
+oos.compare<-function(resp,qm,nfolds) {
     id<-1:nrow(resp)
     item<-names(resp)
     L<-list()
@@ -44,7 +44,7 @@ oos.compare<-function(resp,qm0,nfolds) {
         id<-x$id
         x<-x[,names(resp)]
         ##
-        p.cdm<-cdm.pr(x,qm0)
+        p.cdm<-cdm.pr(x,qm)
         L<-list()
         for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],p.cdm=p.cdm[,i])
         p<-do.call("rbind",L)
@@ -60,3 +60,32 @@ oos.compare<-function(resp,qm0,nfolds) {
     }
     mean(om)
 }
+
+
+oos.compare.newresp<-function(resp,qm,truep) {
+    id<-1:nrow(resp)
+    item<-names(resp)
+    L<-list()
+    for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],resp=resp[,i],truep=truep[,i])
+    df<-do.call("rbind",L)
+    om<-numeric()
+    x<-irw::long2resp(df)
+    id<-x$id
+    x<-x[,names(resp)]
+    ##
+    p.cdm<-cdm.pr(x,qm)
+    L<-list()
+    for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],p.cdm=p.cdm[,i])
+    p<-do.call("rbind",L)
+    df<-merge(df,p)
+    ##
+    p.irt<-irt.pr(x)
+    L<-list()
+    for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],p.irt=p.irt[,i])
+    p<-do.call("rbind",L)
+    df<-merge(df,p)
+    ##
+    df$resp<-rbinom(nrow(df),1,df$truep) ##obliterate old response
+    imv::imv.binary(df$resp,df$p.irt,df$p.cdm)
+}
+

@@ -4,9 +4,9 @@ source("00funs.R")
 ################################3
 ##simulate data with irt
 
-irt.sim<-function(N) {
+irt.sim<-function(a,N=1000) {
     th<-rnorm(N)
-    b<-sort(rnorm(30))
+    b<-sort(rnorm(50))
     th.mat<-matrix(th,length(th),length(b),byrow=FALSE)
     b.mat<-matrix(b,length(th),length(b),byrow=TRUE)
     k<-th.mat-b.mat
@@ -16,31 +16,59 @@ irt.sim<-function(N) {
     resp<-as.data.frame(resp)
     names(resp)<-paste("i",1:ncol(resp),sep='')
     p.true<-p
+    resp<-as.data.frame(resp)
+    names(resp)<-paste("i",1:ncol(resp),sep='')
     ##make up q matrix
-    sk<-rnorm(5)
+    sk<-rnorm(10)
     p<-outer(b,sk,'-')
-    p<-apply(p,2,function(x) 1/(1+exp(-x)))
-    qm0<-p
-    for (i in 1:nrow(qm0)) {
+    p<-apply(p,2,function(x) 1/(1+exp(-a*x)))
+    qm<-p
+    for (i in 1:nrow(qm)) {
         S<-0
         while (S==0) {
-            qm0[i,]<-rbinom(ncol(qm0),1,p[i,])
-            S<-sum(qm0[i,])
+            qm[i,]<-rbinom(ncol(qm),1,p[i,])
+            S<-sum(qm[i,])
         }            
     }         
-    ##
-    ## p.irt<-irt.pr(resp)
-    ## p.cdm<-cdm.pr(resp,qm0)
-    ## coors<-list()
-    ## for (i in 1:ncol(resp)) coors[[i]]<-cor(cbind(resp[,i],p.true[,i],p.irt[,i],p.cdm[,i]))
-    ## ##note that third row >> fourth row!
-    ## sapply(coors,function(x) x[1,])
+    
+    p.irt<-irt.pr(resp)
+    p.cdm<-cdm.pr(resp,qm)
+    
+    L<-list(as.matrix(resp),p.true,p.irt,p.cdm)
+    L<-lapply(L,as.numeric)
+    z<-do.call("cbind",L)
+    true<-cor(z)[2,3:4]
+    
     ##cv imv values
-    oos.compare(resp,qm0,nfolds=4)
+    om<-oos.compare.newresp(resp,qm,truep=p.true)
+    list(t=true,om=om)
 }
 
-N<-runif(5,3,4.5)
-N<-round(10^N)
-om<-sapply(N,irt.sim)
+a<-sort(runif(100,min=.5,max=2))
+library(parallel)
+L<-mclapply(a,irt.sim,mc.cores=10)
 
-plot(N,om,pch=19); abline(h=0)
+
+tr<-lapply(L,function(x) x$t)
+tr<-do.call("rbind",tr)
+om<-sapply(L,function(x) x$om)
+
+
+
+#pdf("/home/bdomingu/Dropbox/Apps/Overleaf/CDM_predictions/scenario2.pdf",width=6,height=3)
+par(mgp=c(2,1,0),mfrow=c(1,2),mar=c(3,3,1,1),oma=rep(.5,4))
+##
+irt<-tr[,1]
+cdm<-tr[,2]
+plot(NULL,xlim=c(-1,1),ylim=0:1,xlab=expression(rho),ylab='r(true,est)')
+pf<-function(x,y,...) {
+    m<-loess(y~x)
+    lines(x,predict(m),...,lwd=2)
+}
+lines(pf(rs,irt))
+lines(pf(rs,cdm,col='red'))
+legend("bottomright",bty='n',fill=c("black","red"),c("irt","cdm"),title="est")
+##
+plot(NULL,xlim=c(-1,1),ylim=c(0,.25),xlab=expression(rho),ylab='IMV(IRT,CDM)')
+lines(pf(rs,om))
+#dev.off()

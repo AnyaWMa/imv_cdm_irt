@@ -67,18 +67,23 @@ simfun<-function(r,N=1000) {
     true<-cor(z)[2,3:4]
     
     ##cv imv values
-    om<-oos.compare(resp,qm,nfolds=5)
+    om<-oos.compare.newresp(resp,qm,truep=p.true)
     list(t=true,om=om)
 
 }
 
-rs<-sort(runif(100,-1,1))
+rs<-sort(runif(1000,-1,1))
 library(parallel)
-L<-mclapply(rs,simfun,mc.cores=4)
+L<-mclapply(rs,simfun,mc.cores=10)
+
+dump("L","")
+
 
 tr<-lapply(L,function(x) x$t)
 tr<-do.call("rbind",tr)
 om<-sapply(L,function(x) x$om)
+
+
 
 pdf("/home/bdomingu/Dropbox/Apps/Overleaf/CDM_predictions/scenario3.pdf",width=6,height=3)
 par(mgp=c(2,1,0),mfrow=c(1,2),mar=c(3,3,1,1),oma=rep(.5,4))
