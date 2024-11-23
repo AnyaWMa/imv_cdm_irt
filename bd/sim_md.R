@@ -1,7 +1,6 @@
 ##equal share of items load on two dimensions
 source("00funs.R")
-simfun<-function(r) {
-    N<-5000
+simfun<-function(r,N=1000) {
     library(MASS)
     ##theta
     th<-mvrnorm(N,mu=rep(0,2),Sigma=matrix(c(1,r,r,1),2,2))
@@ -33,19 +32,20 @@ simfun<-function(r) {
     ##       0,0,0,1,0,1,
     ##       0,0,0,1,1,1
     ##       ),14,6,byrow=TRUE)
-    ##within-item MD
     S<-TRUE
     while (S) {
-        qm<-matrix(rbinom(30*6,1,.5),30,6)
-        S<-any(rowMeans(qm)==0)
+        qm<-matrix(rbinom(50*6,1,.5),50,6)
+        ##block out loadings across thetas
+        for (i in 1:25) qm[i,4:6]<-0
+        for (i in 26:50) qm[i,1:3]<-0
+        S<-any(c(colMeans(qm),rowMeans(qm))==0)
     }        
-    qm0<-qm
 
     ##response probabilities for with g=s=0.1
     pL<-respL<-list()
-    g<-runif(nrow(qm0),min=0,max=.35)
-    s<-runif(nrow(qm0),min=0,max=.35)
-    for (i in 1:nrow(qm0)) {
+    g<-runif(nrow(qm),min=0,max=.35)
+    s<-runif(nrow(qm),min=0,max=.35)
+    for (i in 1:nrow(qm)) {
         ii<-which(qm[i,]==1)
         z<-sk[,ii,drop=FALSE]
         rm<-rowMeans(z)
@@ -59,7 +59,7 @@ simfun<-function(r) {
     names(resp)<-paste("i",1:ncol(resp),sep='')
     
     p.irt<-irt.pr(resp)
-    p.cdm<-cdm.pr(resp,qm0)
+    p.cdm<-cdm.pr(resp,qm)
     
     L<-list(as.matrix(resp),p.true,p.irt,p.cdm)
     L<-lapply(L,as.numeric)
@@ -67,12 +67,12 @@ simfun<-function(r) {
     true<-cor(z)[2,3:4]
     
     ##cv imv values
-    om<-oos.compare(resp,qm0,nfolds=5)
+    om<-oos.compare(resp,qm,nfolds=5)
     list(t=true,om=om)
 
 }
 
-rs<-sort(runif(250,-1,1))
+rs<-sort(runif(100,-1,1))
 library(parallel)
 L<-mclapply(rs,simfun,mc.cores=4)
 
@@ -80,19 +80,20 @@ tr<-lapply(L,function(x) x$t)
 tr<-do.call("rbind",tr)
 om<-sapply(L,function(x) x$om)
 
-par(mgp=c(2,1,0),mfrow=c(1,2))
+pdf("/home/bdomingu/Dropbox/Apps/Overleaf/CDM_predictions/scenario3.pdf",width=6,height=3)
+par(mgp=c(2,1,0),mfrow=c(1,2),mar=c(3,3,1,1),oma=rep(.5,4))
 ##
 irt<-tr[,1]
 cdm<-tr[,2]
-plot(NULL,xlim=c(-1,1),ylim=0:1,xlab='correlation between dimensions',ylab='correlation between estimates and true probabilities')
+plot(NULL,xlim=c(-1,1),ylim=0:1,xlab=expression(rho),ylab='r(true,est)')
 pf<-function(x,y,...) {
     m<-loess(y~x)
     lines(x,predict(m),...,lwd=2)
 }
 lines(pf(rs,irt))
 lines(pf(rs,cdm,col='red'))
-legend("bottomright",bty='n',fill=c("black","red"),c("irt","cdm"))
+legend("bottomright",bty='n',fill=c("black","red"),c("irt","cdm"),title="est")
 ##
-plot(NULL,xlim=c(-1,1),ylim=c(-.05,.15),xlab='correlation between dimensions',ylab='IMV')
+plot(NULL,xlim=c(-1,1),ylim=c(0,.25),xlab=expression(rho),ylab='IMV(IRT,CDM)')
 lines(pf(rs,om))
-
+dev.off()
