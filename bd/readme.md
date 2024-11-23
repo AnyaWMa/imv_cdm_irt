@@ -1,6 +1,0 @@
-- 00funs.R: this is going to contain the necessary helper functions
-- sim1.R: this looks at simple comparisons of cdm/irt recovery when one of the models generates data. recovery performanced based on comparisons to *true probablilities*
-- sim_md.R: this looks at recovery based on the *true probabilities* for irt/cdm analyses in our multidimensional model [we vary r(theta1,theta2) and use theta1 and theta2 to seed skills]
-- sim_md2.R: deprecated
--  imvsim_cdm.R: an *IMV* based analysis of irt/cdm recovery when *cdm* used to generate data
--  imvsim_irt.R: an *IMV* based analysis of irt/cdm recovery when *irt* used to generate data
