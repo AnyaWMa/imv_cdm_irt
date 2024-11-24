@@ -70,3 +70,51 @@ legend("bottomright",bty='n',fill=c("black","red"),c("irt","cdm"),title="est")
 plot(NULL,xlim=c(0,2.5),ylim=c(-.25,0),xlab='a',ylab='IMV(IRT,CDM)')
 lines(pf(a,om))
 #dev.off()
+
+
+irt.sim<-function(n,N=1000) {
+    th<-rnorm(N)
+    b<-sort(rnorm(50,sd=.3))
+    th.mat<-matrix(th,length(th),length(b),byrow=FALSE)
+    b.mat<-matrix(b,length(th),length(b),byrow=TRUE)
+    k<-th.mat-b.mat
+    p<-1/(1+exp(-k))
+    resp<-p
+    for (i in 1:ncol(resp)) resp[,i]<-rbinom(nrow(resp),1,p[,i])
+    resp<-as.data.frame(resp)
+    names(resp)<-paste("i",1:ncol(resp),sep='')
+    p.true<-p
+    resp<-as.data.frame(resp)
+    names(resp)<-paste("i",1:ncol(resp),sep='')
+
+    ##make up q matrix
+    out<-list()
+    for (a in c(0,1.5)) {
+        sk<-rnorm(n)
+        p<-outer(b,sk,'-')
+        p<-apply(p,2,function(x) 1/(1+exp(-a*x)))
+        qm<-p
+        S<-TRUE
+        while (S) {
+            for (i in 1:n) qm[,i]<-rbinom(nrow(qm),1,.5)
+            for (i in 1:nrow(qm)) qm[i,]<-rbinom(ncol(qm),1,p[i,])
+            S<-any(c(colMeans(qm),rowMeans(qm))==0)
+        }            
+        
+        p.irt<-irt.pr(resp)
+        p.cdm<-cdm.pr(resp,qm)
+        
+        L<-list(as.matrix(resp),p.true,p.irt,p.cdm)
+        L<-lapply(L,as.numeric)
+        z<-do.call("cbind",L)
+        true<-cor(z)[2,3:4]
+        
+        ##cv imv values
+        om<-oos.compare.newresp(resp,qm,truep=p.true)
+        out[[as.character(a)]]<-list(t=true,om=om)
+    }
+    out
+}
+library(parallel)
+nn<-sample(c(5,8,11),50,replace=TRUE)
+z<-mclapply(nn,irt.sim,mc.cores=10)
