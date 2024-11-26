@@ -53,14 +53,62 @@ cdm.sim<-function(a,N=1000,sk.offset=0) {
     list(t=true,om=om)
 }
 
+cdm.sim.fast <- function(a, N = 500, sk.offset = 0) {
+  th <- rnorm(N)
+  sk <- runif(10)
+  p <- a * (outer(th, sk - mean(sk), "-")) + sk.offset
+  p <- 1 / (1 + exp(-p))
+  sk <- matrix(rbinom(length(p), 1, p), nrow = N)
+  
+  repeat {
+    qm <- matrix(rbinom(50 * 10, 1, .65), 50, 10)
+    if (all(colMeans(qm) > 0) && all(rowMeans(qm) > 0)) break
+  }
+  
+  g <- runif(nrow(qm), min = 0, max = 0.35)
+  s <- runif(nrow(qm), min = 0, max = 0.35)
+  respL <- vector("list", nrow(qm))
+  pL <- vector("list", nrow(qm))
+  
+  for (i in seq_len(nrow(qm))) {
+    ii <- which(qm[i, ] == 1)
+    z <- sk[, ii, drop = FALSE]
+    rm <- rowMeans(z)
+    p.tmp <- ifelse(rm == 1, 1 - s[i], g[i])
+    respL[[i]] <- rbinom(N, 1, p.tmp)
+    pL[[i]] <- p.tmp
+  }
+  
+  resp <- do.call(cbind, respL)
+  p.true <- do.call(cbind, pL)
+  
+  resp <- as.data.frame(resp)
+  names(resp) <- paste("i", 1:ncol(resp), sep = "")
+  
+  p.irt <- irt.pr(resp)
+  p.cdm <- cdm.pr(resp, qm)
+  
+  z <- cbind(as.numeric(as.matrix(resp)),
+             as.numeric(as.matrix(p.true)),
+             as.numeric(p.irt),
+             as.numeric(p.cdm))
+  true <- cor(z)[2, 3:4]
+  
+  om <- oos.compare.newresp(resp, qm, truep = p.true)
+  list(t = true, om = om)
+}
+
 a<-sort(runif(100,min=0,max=3))
 library(parallel)
-out1<-mclapply(a,cdm.sim,mc.cores=10)
-out2<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5)
+#out1<-mclapply(a,cdm.sim,mc.cores=10)
+#out2<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5)
+out1<-mclapply(a,cdm.sim.fast,mc.cores=10)
+out2<-mclapply(a,cdm.sim.fast,mc.cores=10,sk.offset=1.5)
 #out<-list(out1=out1,out2=out2)
 #save(out,"scenario1.Rdata")
 
 pdf("/home/bdomingu/Dropbox/Apps/Overleaf/CDM_predictions/scenario1.pdf",width=6,height=3)
+pdf("../plots/scenario1_n500.pdf",width=6,height=3)
 par(mgp=c(2,1,0),mfrow=c(1,2),mar=c(3,3,1,1),oma=rep(.5,4))
 ####
 plot(NULL,xlim=c(0,3),ylim=c(0,1),xlab='a',ylab='cor(true,est)')

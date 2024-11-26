@@ -49,6 +49,9 @@ library(mgcv)
 library(GDINA)
 library(MASS)
 ```
+```{r}
+source("bd/00funs.R")
+```
 
 ```{r echo = FALSE}
 # sets how code looks in knitted document
@@ -89,6 +92,9 @@ head(personparm(fit1, what = "mp"))
 #Qval(fit1, method = "wald")
 
 #modelfit(fit1)
+```
+```{r}
+p.cdm<-cdm.pr(data1,Q1,modeltype="DINA")
 ```
 
 # Load IRW
@@ -363,6 +369,19 @@ df <- q_data$frac20$to_data_frame()
 df.cdm.structure.frac20 <- func.convert.Q.data.structure.with.held.out(df, 0)
 ```
 
+```{r}
+pr <- cdm.pr(df.cdm.structure.frac20$dat,df.cdm.structure.frac20$Q, model = "DINA")
+```
+
+
+```{r}
+as.data.frame(pr) %>% 
+  mutate(id = df.cdm.structure.frac20$id) %>% 
+  pivot_longer(cols = starts_with("V"),  # Select columns that represent attributes
+               names_to = "item",  # Name for the new 'attribute' column
+               values_to = "cdm.prediction") 
+```
+
 fit DINA model
 
 ```{r}
@@ -408,7 +427,7 @@ item_prob <- table.list[[name]]
 
 # simulate data
 ```{r}
-Q <- frac20.q
+Q <- df.cdm.structure.frac20$Q
 N <- nrow(frac20$dat)
 
 J <- nrow(Q)
@@ -430,10 +449,12 @@ df.sim.resp.long <- as.data.frame(dat) %>%
   
 ```
 
+
 ```{r}
 df.sim.resp <- df.sim.resp.long %>% 
-  left_join(Q)
+  left_join(Q %>% mutate(item = seq(1, 20, 1)))
 ```
+
 
 # Out-of-sample prediction
 for a given data
@@ -444,30 +465,32 @@ set.seed(10)
 func.run.analysis <- function(df, cdm_model, heldout_rate, limited_skills){
   n_items = n_distinct(df$item)
   df.cdm.structure <- func.convert.Q.data.structure.with.held.out.limited.skills(df, heldout_rate, limited_skills)
+  
+  predict.matrix <- cdm.pr(df.cdm.structure$dat,df.cdm.structure$Q, model = "DINA")
   #df.resp.without.id <- df.cdm.structure$dat %>% arrange(id) %>% select(-id)
-  mod.dina <- GDINA(df.cdm.structure$dat,df.cdm.structure$Q,model = cdm_model)
+  #mod.dina <- GDINA(df.cdm.structure$dat,df.cdm.structure$Q,model = cdm_model)
   
   
-  # CDM model
-  df.cdm.structure.q <- df.cdm.structure$Q %>% 
-    mutate(item = seq(1, n_items, 1))
+  # # CDM model
+  # df.cdm.structure.q <- df.cdm.structure$Q %>% 
+  #   mutate(item = seq(1, n_items, 1))
+  # 
+  # q_matrix_long <-  df.cdm.structure.q %>%
+  #   pivot_longer(cols = starts_with("Qmatrix"),  # Select columns that represent attributes
+  #              names_to = "Attribute",  # Name for the new 'attribute' column
+  #              values_to = "Value") 
+  # 
+  # persons.with.id <- as.data.frame(personparm(mod.dina)) %>% 
+  #   mutate(id = df.cdm.structure$id)
+  # 
+  # coef <- coef(mod.dina, "itemprob")
+  # 
+  # table.list <- func.get.table(n_items, coef, q_matrix_long)
+  # 
+  # 
+  # predict.matrix <- func.predict.resp.all.items(df.cdm.structure, table.list, persons.with.id, table.list)
   
-  q_matrix_long <-  df.cdm.structure.q %>%
-    pivot_longer(cols = starts_with("Qmatrix"),  # Select columns that represent attributes
-               names_to = "Attribute",  # Name for the new 'attribute' column
-               values_to = "Value") 
-  
-  persons.with.id <- as.data.frame(personparm(mod.dina)) %>% 
-    mutate(id = df.cdm.structure$id)
-  
-  coef <- coef(mod.dina, "itemprob")
-  
-  table.list <- func.get.table(n_items, coef, q_matrix_long)
-
-  
-  predict.matrix <- func.predict.resp.all.items(df.cdm.structure, table.list, persons.with.id, table.list)
-  
-  result <- predict.matrix  %>% 
+  result <- as.data.frame(predict.matrix)  %>% 
     mutate(id = row_number()) %>% 
     pivot_longer(cols = starts_with("V"), names_to = "item", values_to = "prediction.cdm") %>% 
     left_join(df.cdm.structure$heldout)
@@ -478,7 +501,6 @@ func.run.analysis <- function(df, cdm_model, heldout_rate, limited_skills){
   thetas <- as.data.frame(fscores(mod.Rasch))
   
   params <- data.frame(coef(mod.Rasch, IRTpars = TRUE, simplify = TRUE))
-  
   
   result.2 <- tibble(th = thetas$F1, id = df.cdm.structure$id) %>%
     left_join(df.cdm.structure$heldout) %>% 
