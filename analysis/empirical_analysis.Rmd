@@ -75,6 +75,7 @@ q_data<-dataset_tables[test]
 print(length(q_data))
 ```
 
+
 # helper functions 
 ## IRT
 ```{r}
@@ -84,32 +85,6 @@ prob.irt <-function(a, b,theta) {
 ```
 
 ## Convert to Q matrix and data 
-```{r}
-func.convert.Q.data.structure <- function(df){
-  Q <- df %>% 
-    dplyr :: select(-c(id, resp)) %>% 
-    unique() %>% 
-    mutate(item_num = str_extract(item, "\\d+") %>% as.numeric()) %>% 
-    arrange(item_num) %>% 
-     dplyr ::select(-c(item, item_num))
-  
-  dat <- df %>% 
-    mutate(item_num = str_extract(item, "\\d+") %>% as.numeric()) %>% 
-     dplyr ::select(item_num, id, resp) %>% 
-    arrange(item_num) %>% 
-    mutate(item = paste0("V",item_num)) %>% 
-     dplyr ::select(-item_num) %>% 
-    pivot_wider(names_from = item, values_from = resp) %>% 
-    arrange(id)
-  
-  tables_list <- list()
-  tables_list[['Q']] <- Q
-  tables_list[['dat']] <- dat
-  
-  return (tables_list)
-}
-
-```
 
 ```{r}
 func.convert.Q.data.structure.with.held.out <- function(df, heldout_rate){
@@ -150,7 +125,7 @@ func.run.analysis <- function(df, cdm_model, if_oos, heldout_rate, cdm_pr_estima
   
   df.cdm.structure <- func.convert.Q.data.structure.with.held.out(df, heldout_rate)
   
-  predict.matrix <- cdm_pr_estimate(df.cdm.structure$dat,df.cdm.structure$Q, model = "DINA")
+  predict.matrix <- cdm_pr_estimate(df.cdm.structure$dat,df.cdm.structure$Q, model = cdm_model)
   
   result <- as.data.frame(predict.matrix) %>% 
     set_names(item_list) %>% 
@@ -194,132 +169,188 @@ func.run.analysis <- function(df, cdm_model, if_oos, heldout_rate, cdm_pr_estima
 
 # Empirical analysis
 
+## sanity check 
+
+### Q1: check if q_matrix is correct?
+```{r}
+frac20_irw <- q_data$frac20$to_data_frame()
+
+item_list <- sort(unique(frac20_irw $item))
+
+df.cdm.structure <- func.convert.Q.data.structure.with.held.out(frac20_irw, 0)
+```
+```{r}
+df.qmatrix.irw <- df.cdm.structure$Q %>% 
+  add_column(item = item_list) %>% 
+  mutate(item_num = as.numeric(gsub("\\D", "", item))) %>% 
+  arrange(item_num) %>% 
+  dplyr :: select(-c(item, item_num)) %>% 
+  as.matrix()
+```
+```{r}
+matrix1_unnamed <- unname(df.qmatrix.irw)
+matrix2_unnamed <- unname(frac20$Q %>% as.matrix())
+
+identical(matrix1_unnamed, matrix2_unnamed)
+```
+
+### Q2: check if frac20 cdm prediction makes sense?
+
+```{r}
+predict.matrix <- cdm.pr(df.cdm.structure$dat,df.cdm.structure$Q, model = "DINA")
+  
+result <- as.data.frame(predict.matrix) %>% 
+    set_names(item_list) %>% 
+    mutate(id = row_number()) %>% 
+    pivot_longer(cols = item_list, names_to = "item", values_to = "prediction.cdm") %>% 
+    left_join(df.cdm.structure$heldout)
+ 
+  # IRT model
+mod.irt <- mirt(df.cdm.structure$dat, 1, itemtype = "2PL")
+  
+thetas <- as.data.frame(fscores(mod.irt))
+  
+params <- data.frame(coef(mod.irt, IRTpars = TRUE, simplify = TRUE))
+  
+result.2 <- tibble(th = thetas$F1, id = df.cdm.structure$id) %>%
+    left_join(df.cdm.structure$heldout) %>% 
+    left_join(rownames_to_column(params, var = "item")) %>% 
+    mutate(prediction.irt = prob.irt(items.a, items.b, th)) %>% 
+     dplyr ::select(id, item, resp, held_out, prediction.irt)
+  
+result.compared <- result %>% 
+    left_join(result.2) 
+```
+
+prediction correlation between cdm and irt
+```{r}
+cor(result.compared$prediction.cdm, result.compared$prediction.irt)
+```
+
+### Q3: check if any item?
+```{r}
+df.item.check <- result.compared %>% 
+    mutate(prediction.cdm.binary = ifelse(runif(n()) < prediction.cdm, 1, 0),  # Roll dice based on prediction.cdm probability
+         prediction.irt.binary = ifelse(runif(n()) < prediction.irt, 1, 0)   # Roll dice based on prediction.irt probability
+         ) %>% 
+  mutate(cdm.correct = ifelse(resp == prediction.cdm.binary, 1, 0), 
+         irt.correct = ifelse(resp == prediction.irt.binary, 1, 0)) %>% 
+  group_by(item, held_out) %>% 
+  dplyr :: summarise(p.cdm.correct = mean(cdm.correct), p.irt.correct = mean(irt.correct)) %>% 
+  arrange(p.cdm.correct)
+```
+
+```{r}
+ggplot(df.item.check %>% mutate(held_out = as.character(held_out)),
+       mapping = aes(x = p.cdm.correct, 
+                     y = p.irt.correct, 
+                     color = held_out)) +
+  # Connect points with the same 'item'
+  geom_line(aes(group = item), color = "gray") +  # Lines for same 'item'
+  geom_text(aes(label = item)) +  # Text labels for items
+  scale_color_manual(values = c("black", "darkred")) + 
+  xlim(0.3, 1) + ylim(0.3, 1) + 
+  coord_equal() +
+  theme_minimal() + stat_cor()
+```
+
+## Run all data
+
+```{r}
+func.run.empirical.data <- function(cdm_model = "DINA", cdm_pr_estimate = cdm.pr, iterations = 5) {
+  # Initialize empty lists to store results
+  all_results <- list()
+  oos_results <- list()
+  
+  # Iterate over objects in q_data (adjust the loop as needed for your actual structure)
+  for (obj_name in names(q_data)) {
+    if (!substring(obj_name, 1, 9) %in% c("cdm_timss", "cdm_pisa0", "hmcdm_spa")) {
+      print(obj_name)
+      
+      # Convert the object to a data frame
+      df <- q_data[[obj_name]]$to_data_frame()
+      
+      # Initialize lists to store results for this object
+      object_1_results <- list()
+      object_2_results <- list()
+      
+      # Remove "rt" column if it exists
+      if ("rt" %in% colnames(df)) {
+        df <- df[, !colnames(df) %in% "rt"]
+      }
+      
+      # Run the first type of analysis once
+      result <- func.run.analysis(df, cdm_model, FALSE, 0, cdm_pr_estimate)
+      object_1_results[[i]] <- result
+      
+      # Run the second type of analysis multiple times
+      for (i in seq(1, iterations, 1)) {
+        result <- func.run.analysis(df, cdm_model, TRUE, 0.2, cdm_pr_estimate)
+        object_2_results[[i]] <- result
+      }
+      
+      # Combine results for this object and store them in lists
+      all_results[[obj_name]] <- do.call(rbind, object_1_results)
+      oos_results[[obj_name]] <- do.call(rbind, object_2_results)
+    }
+  }
+  
+  # Combine all results into a single data frame
+  final_all_results <- do.call(rbind, lapply(names(all_results), function(name) {
+    cbind(object = name, all_results[[name]])
+  }))
+  
+  final_oos_results <- do.call(rbind, lapply(names(oos_results), function(name) {
+    cbind(object = name, oos_results[[name]])
+  }))
+  
+  # Create the comparison data frame
+  df.imv.compare <- as.data.frame(final_all_results) %>%
+    set_names(c("dataname", "imv_all_responses")) %>%
+    mutate(imv_all_responses = as.numeric(imv_all_responses)) %>%
+    left_join(
+      as.data.frame(final_oos_results) %>%
+        set_names(c("dataname", "imv")) %>%
+        group_by(dataname) %>%
+        mutate(imv = as.numeric(imv)) %>%
+        dplyr::summarise(mean_imv = mean(imv), sd_imv = sd(imv))
+    )
+  
+  # Return the comparison data frame
+  return(df.imv.compare)
+}
+```
+
 ```{r}
 set.seed(10)
-```
 
-## using CDM ability estimate 0/1
-```{r}
-# Initialize an empty list to store results
-all_results <- list()
-oos_results <- list()
+df.imv.compare.1 <- func.run.empirical.data(model = "DINA")
 
-# Iterate over objects in q_data (adjust the loop as needed for your actual structure)
-for (obj_name in names(q_data)) {
-  if (!substring(obj_name, 1, 9) %in%  c("cdm_timss","cdm_pisa0", "hmcdm_spa")){
-  print(obj_name)
-  # Convert the object to a data frame
-  df <- q_data[[obj_name]]$to_data_frame()
-  
-  # Initialize a list to store results for this object
-  object_1_results <- list()
-  object_2_results <- list()
-  
-  if ("rt" %in% colnames(df)) {
-  df <- df[, !colnames(df) %in% "rt"]
-  }
-  
-  for (i in seq(1, 1, 1)) {
-    result <- func.run.analysis(df, "DINA", FALSE, 0)
-    object_1_results[[i]] <- result
-  }
-  
-  # Run the analysis multiple times for this object
-  for (i in seq(1, 5, 1)) {
-    result <- func.run.analysis(df, "DINA", TRUE, 0.2)
-    object_2_results[[i]] <- result
-  }
-  
-  # Combine the results for this object and store them in all_results
-  all_results[[obj_name]] <- do.call(rbind, object_1_results)
-  oos_results[[obj_name]] <- do.call(rbind, object_2_results)
-}
-}
-# Combine all results into a single data frame
-final_all_results <- do.call(rbind, lapply(names(all_results), function(name) {
-  cbind(object = name, all_results[[name]])
-}))
+df.imv.compare.2 <- func.run.empirical.data(cdm_model = "DINO")
 
-final_oos_results <- do.call(rbind, lapply(names(oos_results), function(name) {
-  cbind(object = name, oos_results[[name]])
-}))
-```
-
-
-```{r}
-df.imv.compare.1 <- as.data.frame(final_all_results) %>% 
-  set_names(c("dataname", "imv_all_responses")) %>% 
-  mutate(imv_all_responses = as.numeric(imv_all_responses)) %>% 
-  left_join(as.data.frame(final_oos_results) %>% 
-  set_names(c("dataname", "imv")) %>% 
-  group_by(dataname) %>% 
-  mutate(imv = as.numeric(imv)) %>% 
-  dplyr :: summarise(mean(imv), sd(imv)))
-  
-```
-
-## using cdm.pr.marg
-```{r}
-# Initialize an empty list to store results
-all_results <- list()
-oos_results <- list()
-
-# Iterate over objects in q_data (adjust the loop as needed for your actual structure)
-for (obj_name in names(q_data)) {
-  if (!substring(obj_name, 1, 9) %in%  c("cdm_timss","cdm_pisa0", "hmcdm_spa")){
-  print(obj_name)
-  # Convert the object to a data frame
-  df <- q_data[[obj_name]]$to_data_frame()
-  
-  # Initialize a list to store results for this object
-  object_1_results <- list()
-  object_2_results <- list()
-  
-  if ("rt" %in% colnames(df)) {
-  df <- df[, !colnames(df) %in% "rt"]
-  }
-  
-  for (i in seq(1, 1, 1)) {
-    result <- func.run.analysis(df, "DINA", FALSE, 0, cdm.pr.marg)
-    object_1_results[[i]] <- result
-  }
-  
-  # Run the analysis multiple times for this object
-  for (i in seq(1, 5, 1)) {
-    result <- func.run.analysis(df, "DINA", TRUE, 0.2, cdm.pr.marg)
-    object_2_results[[i]] <- result
-  }
-  
-  # Combine the results for this object and store them in all_results
-  all_results[[obj_name]] <- do.call(rbind, object_1_results)
-  oos_results[[obj_name]] <- do.call(rbind, object_2_results)
-}
-}
-# Combine all results into a single data frame
-final_all_results <- do.call(rbind, lapply(names(all_results), function(name) {
-  cbind(object = name, all_results[[name]])
-}))
-
-final_oos_results <- do.call(rbind, lapply(names(oos_results), function(name) {
-  cbind(object = name, oos_results[[name]])
-}))
+df.imv.compare.3 <- func.run.empirical.data(cdm_model = "GDINA")
 ```
 
 ```{r}
-df.imv.compare.2 <- as.data.frame(final_all_results) %>% 
-  set_names(c("dataname", "imv_all_responses")) %>% 
-  mutate(imv_all_responses_marg = as.numeric(imv_all_responses)) %>% 
-  dplyr :: select(-imv_all_responses) %>% 
-  left_join(as.data.frame(final_oos_results) %>% 
-  set_names(c("dataname", "imv")) %>% 
-  group_by(dataname) %>% 
-  mutate(imv_marg = as.numeric(imv)) %>% 
-  dplyr :: summarise(mean(imv_marg), sd(imv_marg)))
-  
+df.imv.compare.result <- df.imv.compare.1 %>% 
+  mutate(cdm_model = "DINA") %>% 
+  rbind(df.imv.compare.2 %>% mutate(cdm_model = "DINO")) %>% 
+  rbind(df.imv.compare.3 %>% mutate(cdm_model = "GDINA")) %>% 
+  relocate(dataname, cdm_model) %>% 
+  arrange(dataname)
+```
+
+# LaTeX table
+```{r}
+library(kableExtra)
 ```
 
 ```{r}
-df.imv.compare.2 %>% 
-  right_join(df.imv.compare.1)
+# Generate LaTeX Table with Styling
+table_latex <- kable(df.imv.compare.result, format = "latex", caption = "IMV(2PL, CDM) from IRW empirical datasets") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+# Print LaTeX Code
+cat(table_latex)
 ```
 
