@@ -44,7 +44,7 @@ oos.compare<-function(resp,qm,nfolds) {
         id<-x$id
         x<-x[,names(resp)]
         ##
-        p.cdm<-cdm.pr(x,qm)
+        p.cdm<-cdm.pr.marg(x,qm)
         L<-list()
         for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],p.cdm=p.cdm[,i])
         p<-do.call("rbind",L)
@@ -73,7 +73,7 @@ oos.compare.newresp<-function(resp,qm,truep) {
     id<-x$id
     x<-x[,names(resp)]
     ##
-    p.cdm<-cdm.pr(x,qm)
+    p.cdm<-cdm.pr.marg(x,qm)
     L<-list()
     for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],p.cdm=p.cdm[,i])
     p<-do.call("rbind",L)
@@ -101,13 +101,13 @@ oos.compare.newresp.2q<-function(resp,qm1,qm2,truep) {
     id<-x$id
     x<-x[,names(resp)]
     ##cdm1
-    p.cdm<-cdm.pr(x,qm1)
+    p.cdm<-cdm.pr.marg(x,qm1)
     L<-list()
     for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],p.cdm1=p.cdm[,i])
     p<-do.call("rbind",L)
     df<-merge(df,p)
     ##cdm2
-    p.cdm<-cdm.pr(x,qm2)
+    p.cdm<-cdm.pr.marg(x,qm2)
     L<-list()
     for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],p.cdm2=p.cdm[,i])
     p<-do.call("rbind",L)

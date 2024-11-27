@@ -3,12 +3,12 @@ source("00funs.R")
 
 ################################3
 ##simulate data with naughty cdm
-cdm.sim<-function(a,N=1000,sk.offset=0) {
+cdm.sim<-function(a,N=1000,sk.offset=0,nsk=6) {
     ##skills
                                         #sk<-rbinom(5*N,1,.5)
                                         #sk<-matrix(sk,nrow=N,ncol=5)
     th<-rnorm(N)
-    sk<-runif(10)
+    sk<-runif(nsk)
     p<-a*(outer(th,sk-mean(sk),'-'))
     p<-p+sk.offset ##controlling prevalence of skills
     p<-apply(p,2,function(x) 1/(1+exp(-(x))))
@@ -17,7 +17,7 @@ cdm.sim<-function(a,N=1000,sk.offset=0) {
     ##qmatrix
     S<-TRUE
     while (S) {
-        qm<-matrix(rbinom(50*10,1,.65),50,10)
+        qm<-matrix(rbinom(50*nsk,1,.65),50,nsk)
         S<-any(c(colMeans(qm),rowMeans(qm))==0)
     }        
 
@@ -52,6 +52,12 @@ cdm.sim<-function(a,N=1000,sk.offset=0) {
     om<-oos.compare.newresp(resp,qm,truep=p.true)
     list(t=true,om=om)
 }
+a<-sort(runif(100,min=0,max=3))
+library(parallel)
+out1<-mclapply(a,cdm.sim,mc.cores=10)
+out2<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5)
+out<-list(out1=out1,out2=out2)
+save(out,file="scenario1.Rdata")
 
 cdm.sim.fast <- function(a, N = 500, sk.offset = 0) {
   th <- rnorm(N)
@@ -86,7 +92,7 @@ cdm.sim.fast <- function(a, N = 500, sk.offset = 0) {
   names(resp) <- paste("i", 1:ncol(resp), sep = "")
   
   p.irt <- irt.pr(resp)
-  p.cdm <- cdm.pr(resp, qm)
+  p.cdm <- cdm.pr.marg(resp, qm)
   
   z <- cbind(as.numeric(as.matrix(resp)),
              as.numeric(as.matrix(p.true)),
@@ -100,22 +106,11 @@ cdm.sim.fast <- function(a, N = 500, sk.offset = 0) {
 
 a<-sort(runif(100,min=0,max=3))
 library(parallel)
-<<<<<<< HEAD
-out1<-mclapply(a,cdm.sim,mc.cores=10)
-out2<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5)
-out<-list(out1=out1,out2=out2)
-save(out,file="scenario1.Rdata")
-=======
-#out1<-mclapply(a,cdm.sim,mc.cores=10)
-#out2<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5)
 out1<-mclapply(a,cdm.sim.fast,mc.cores=10)
 out2<-mclapply(a,cdm.sim.fast,mc.cores=10,sk.offset=1.5)
-#out<-list(out1=out1,out2=out2)
-#save(out,"scenario1.Rdata")
->>>>>>> 72b602f0ceebb7a8ebabc4a5c155bbf731e5dac8
 
 pdf("/home/bdomingu/Dropbox/Apps/Overleaf/CDM_predictions/scenario1.pdf",width=6,height=3)
-pdf("../plots/scenario1_n500.pdf",width=6,height=3)
+#pdf("../plots/scenario1_n500.pdf",width=6,height=3)
 par(mgp=c(2,1,0),mfrow=c(1,2),mar=c(3,3,1,1),oma=rep(.5,4))
 ####
 plot(NULL,xlim=c(0,3),ylim=c(0,1),xlab='a',ylab='cor(true,est)')
@@ -136,7 +131,7 @@ f(out2,lty=2)
 legend("bottomright",bty='n',fill=c("black","red"),c("irt","cdm"),title="est")
 
 #####
-plot(NULL,xlim=c(0,3),ylab="IMV",xlab='a',ylim=c(-.075,.1))
+plot(NULL,xlim=c(0,3),ylab="IMV",xlab='a',ylim=c(0,.15))
 f<-function(out,...) {
     om<-lapply(out,function(x) x$om)
     df<-data.frame(a=a,om=unlist(om))

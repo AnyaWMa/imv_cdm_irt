@@ -30,7 +30,7 @@ irt.sim<-function(a,N=1000) {
     }            
     
     p.irt<-irt.pr(resp)
-    p.cdm<-cdm.pr(resp,qm)
+    p.cdm<-cdm.pr.marg(resp,qm)
     
     L<-list(as.matrix(resp),p.true,p.irt,p.cdm)
     L<-lapply(L,as.numeric)
