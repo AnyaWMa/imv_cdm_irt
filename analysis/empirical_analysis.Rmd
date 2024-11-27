@@ -1,0 +1,296 @@
+---
+title: "IRW explore"
+author: "Wanjing Anya Ma"
+date:  "`r Sys.Date()`"
+output:
+  bookdown::html_document2:
+    toc: true
+    toc_depth: 4
+    theme: cosmo
+    highlight: tango
+    
+---
+
+# Data Preprocessing
+## Load Packages
+Let's first load the packages that we need for this chapter. 
+
+```{r, message=FALSE, warning = FALSE, echo = FALSE}
+library("knitr") # for rendering the RMarkdown file
+library("tidyverse") # for data wrangling 
+library(dplyr)
+library(mirt)
+library('ggpubr')
+library(Metrics)
+library(hash)
+library(ggplot2)
+library(GGally)
+library(gridExtra)
+library(rstudioapi)
+library(TAM)
+library(mgcv)
+library(GDINA)
+library(MASS)
+library(imv)
+```
+```{r}
+source("bd/00funs.R")
+```
+
+```{r echo = FALSE}
+# sets how code looks in knitted document
+opts_chunk$set(comment = "")
+
+# suppresses warning about grouping 
+options(dplyr.summarise.inform = F)
+```
+
+# Load IRW
+```{r}
+#reliability 
+dataset <- redivis::user("datapages")$dataset("item_response_warehouse",version='v7.0')
+
+dataset_tables <- dataset$list_tables()
+```
+
+## Get CDM data
+```{r}
+##
+print(length(dataset_tables))
+names<-sapply(dataset_tables,function(x) x$name)
+ii<-grep("metadata",names)
+names(dataset_tables)<-names
+if (length(ii)>0) dataset_tables<-dataset_tables[-ii]   
+##
+f<-function(table) table$list_variables()
+nms<-lapply(dataset_tables,f)
+
+##
+f<-function(x) {
+    nm<-sapply(x,function(x) x$name)
+    any(grepl("^Qmat",nm))
+}
+test<-sapply(nms,f)
+q_data<-dataset_tables[test]
+print(length(q_data))
+```
+
+# helper functions 
+## IRT
+```{r}
+prob.irt <-function(a, b,theta) {
+  1 / (1 + exp(-a * (theta - b)))
+}
+```
+
+## Convert to Q matrix and data 
+```{r}
+func.convert.Q.data.structure <- function(df){
+  Q <- df %>% 
+    dplyr :: select(-c(id, resp)) %>% 
+    unique() %>% 
+    mutate(item_num = str_extract(item, "\\d+") %>% as.numeric()) %>% 
+    arrange(item_num) %>% 
+     dplyr ::select(-c(item, item_num))
+  
+  dat <- df %>% 
+    mutate(item_num = str_extract(item, "\\d+") %>% as.numeric()) %>% 
+     dplyr ::select(item_num, id, resp) %>% 
+    arrange(item_num) %>% 
+    mutate(item = paste0("V",item_num)) %>% 
+     dplyr ::select(-item_num) %>% 
+    pivot_wider(names_from = item, values_from = resp) %>% 
+    arrange(id)
+  
+  tables_list <- list()
+  tables_list[['Q']] <- Q
+  tables_list[['dat']] <- dat
+  
+  return (tables_list)
+}
+
+```
+
+```{r}
+func.convert.Q.data.structure.with.held.out <- function(df, heldout_rate){
+  Q <- df %>% 
+     dplyr ::select(-c(id, resp)) %>% 
+    unique() %>% 
+     dplyr ::arrange(item) %>% 
+     dplyr ::select(-c(item))
+  
+  df.held.out <- df %>% 
+     dplyr ::select(item, id, resp) %>% 
+    dplyr :: arrange(item) %>% 
+    mutate(held_out = rbinom(n = n(), size = 1, prob = heldout_rate)) %>% 
+     dplyr ::arrange(id)
+  
+  df.dat <- df.held.out %>% 
+    filter(held_out == 0) %>% 
+     dplyr ::select(-c(held_out)) %>% 
+    pivot_wider(names_from = item, values_from = resp) %>% 
+     dplyr ::arrange(id) 
+  
+  tables_list <- list()
+  tables_list[['Q']] <- Q
+  tables_list[['dat']] <- df.dat %>%  dplyr ::select(-id)
+  tables_list[['heldout']] <- df.held.out
+  tables_list[['id']] <- df.dat$id
+  
+  return (tables_list)
+}
+```
+
+
+## OOS prediction
+```{r}
+func.run.analysis <- function(df, cdm_model, if_oos, heldout_rate){
+  n_items = n_distinct(df$item)
+  item_list <- sort(unique(df$item))
+  
+  df.cdm.structure <- func.convert.Q.data.structure.with.held.out(df, heldout_rate)
+  
+  predict.matrix <- cdm.pr(df.cdm.structure$dat,df.cdm.structure$Q, model = "DINA")
+  
+  result <- as.data.frame(predict.matrix) %>% 
+    set_names(item_list) %>% 
+    mutate(id = row_number()) %>% 
+    pivot_longer(cols = item_list, names_to = "item", values_to = "prediction.cdm") %>% 
+    left_join(df.cdm.structure$heldout)
+ 
+  # IRT model
+  mod.irt <- mirt(df.cdm.structure$dat, 1, itemtype = "2PL")
+  
+  thetas <- as.data.frame(fscores(mod.irt))
+  
+  params <- data.frame(coef(mod.irt, IRTpars = TRUE, simplify = TRUE))
+  
+  result.2 <- tibble(th = thetas$F1, id = df.cdm.structure$id) %>%
+    left_join(df.cdm.structure$heldout) %>% 
+    left_join(rownames_to_column(params, var = "item")) %>% 
+    mutate(prediction.irt = prob.irt(items.a, items.b, th)) %>% 
+     dplyr ::select(id, item, resp, held_out, prediction.irt)
+  
+  result.compared <- result %>% 
+    left_join(result.2) 
+  
+  
+  
+  if (if_oos) {
+    df.test <- result.compared %>% 
+    filter(held_out == 1) %>% 
+    filter(!is.na(prediction.irt), !is.na(prediction.cdm))
+  } else {
+    df.test <- result.compared %>% 
+    filter(!is.na(prediction.irt), !is.na(prediction.cdm))
+  }
+  
+  imv <- imv.binary(df.test$resp, df.test$prediction.irt, df.test$prediction.cdm)
+  print(imv)
+  return (imv)
+}
+```
+
+
+# Empirical analysis
+
+
+```{r}
+# Initialize an empty list to store results
+all_results <- list()
+
+# Iterate over objects in q_data (adjust the loop as needed for your actual structure)
+for (obj_name in names(q_data)) {
+  if (!substring(obj_name, 1, 9) %in%  c("cdm_timss","cdm_pisa0", "hmcdm_spa")){
+  print(obj_name)
+  # Convert the object to a data frame
+  df <- q_data[[obj_name]]$to_data_frame()
+  
+  # Initialize a list to store results for this object
+  object_results <- list()
+  
+  if ("rt" %in% colnames(df)) {
+  df <- df[, !colnames(df) %in% "rt"]
+}
+  # Run the analysis multiple times for this object
+  for (i in seq(1, 1, 1)) {
+    result <- func.run.analysis(df, "DINA", FALSE, 0)
+    object_results[[i]] <- result
+  }
+  
+  # Combine the results for this object and store them in all_results
+  all_results[[obj_name]] <- do.call(rbind, object_results)
+}
+}
+# Combine all results into a single data frame
+final_results <- do.call(rbind, lapply(names(all_results), function(name) {
+  cbind(object = name, all_results[[name]])
+}))
+
+# Print or view the final results
+print(final_results)
+```
+```{r}
+final_results
+```
+
+```{r}
+# Initialize an empty list to store results
+all_results <- list()
+oos_results <- list()
+
+# Iterate over objects in q_data (adjust the loop as needed for your actual structure)
+for (obj_name in names(q_data)) {
+  if (!substring(obj_name, 1, 9) %in%  c("cdm_timss","cdm_pisa0", "hmcdm_spa")){
+  print(obj_name)
+  # Convert the object to a data frame
+  df <- q_data[[obj_name]]$to_data_frame()
+  
+  # Initialize a list to store results for this object
+  object_1_results <- list()
+  object_2_results <- list()
+  
+  if ("rt" %in% colnames(df)) {
+  df <- df[, !colnames(df) %in% "rt"]
+  }
+  
+  for (i in seq(1, 1, 1)) {
+    result <- func.run.analysis(df, "DINA", FALSE, 0)
+    object_1_results[[i]] <- result
+  }
+  
+  # Run the analysis multiple times for this object
+  for (i in seq(1, 5, 1)) {
+    result <- func.run.analysis(df, "DINA", TRUE, 0.2)
+    object_2_results[[i]] <- result
+  }
+  
+  # Combine the results for this object and store them in all_results
+  all_results[[obj_name]] <- do.call(rbind, object_1_results)
+  oos_results[[obj_name]] <- do.call(rbind, object_2_results)
+}
+}
+# Combine all results into a single data frame
+final_all_results <- do.call(rbind, lapply(names(all_results), function(name) {
+  cbind(object = name, all_results[[name]])
+}))
+
+final_oos_results <- do.call(rbind, lapply(names(oos_results), function(name) {
+  cbind(object = name, oos_results[[name]])
+}))
+```
+
+
+```{r}
+as.data.frame(final_all_results) %>% 
+  set_names(c("dataname", "imv_all_responses")) %>% 
+  mutate(imv_all_responses = as.numeric(imv_all_responses)) %>% 
+  left_join(as.data.frame(final_oos_results) %>% 
+  set_names(c("dataname", "imv")) %>% 
+  group_by(dataname) %>% 
+  mutate(imv = as.numeric(imv)) %>% 
+  dplyr :: summarise(mean(imv), sd(imv)))
+  
+```
+
+
