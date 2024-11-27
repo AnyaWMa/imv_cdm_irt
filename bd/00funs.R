@@ -86,7 +86,10 @@ oos.compare.newresp<-function(resp,qm,truep) {
     df<-merge(df,p)
     ##
     df$resp<-rbinom(nrow(df),1,df$truep) ##obliterate old response
-    imv::imv.binary(df$resp,df$p.irt,df$p.cdm)
+    om<-imv::imv.binary(df$resp,df$p.irt,df$p.cdm)
+    oracle.irt<-imv::imv.binary(df$resp,df$p.irt,df$truep)
+    oracle.cdm<-imv::imv.binary(df$resp,df$p.cdm,df$truep)
+    c(om=om,oracle.irt=oracle.irt,oracle.cdm=oracle.cdm)
 }
 
 

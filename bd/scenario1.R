@@ -43,16 +43,20 @@ cdm.sim<-function(a,N=1000,sk.offset=0,nsk=6) {
     p.irt<-irt.pr(resp)
     p.cdm<-cdm.pr.marg(resp,qm)
     
-    L<-list(as.matrix(resp),p.true,p.irt,p.cdm)
-    L<-lapply(L,as.numeric)
-    z<-do.call("cbind",L)
-    true<-cor(z)[2,3:4]
+    ## L<-list(as.matrix(resp),p.true,p.irt,p.cdm)
+    ## L<-lapply(L,as.numeric)
+    ## z<-do.call("cbind",L)
+    ## true<-cor(z)[2,3:4]
+    coors<-list()
+    for (i in 1:ncol(resp)) coors[[i]]<-cor(cbind(resp[,i],p.true[,i],p.irt[,i],p.cdm[,i]))
+    ss<-sapply(coors,function(x) x[1,])
+    true<-rowMeans(ss)[3:4]
     
     ##cv imv values
     om<-oos.compare.newresp(resp,qm,truep=p.true)
     list(t=true,om=om)
 }
-a<-sort(runif(100,min=0,max=3))
+a<-sort(runif(10,min=0,max=3))
 library(parallel)
 out1<-mclapply(a,cdm.sim,mc.cores=10)
 out2<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5)
@@ -114,33 +118,29 @@ pdf("/home/bdomingu/Dropbox/Apps/Overleaf/CDM_predictions/scenario1.pdf",width=6
 par(mgp=c(2,1,0),mfrow=c(1,2),mar=c(3,3,1,1),oma=rep(.5,4))
 ####
 plot(NULL,xlim=c(0,3),ylim=c(0,1),xlab='a',ylab='cor(true,est)')
+pf<-function(x,y,...) {
+    m<-loess(y~x)
+    lines(x,predict(m),...,lwd=2)
+}
 f<-function(out,...) {
     tr<-lapply(out,function(x) x$t)
     z<-do.call("rbind",tr)
     irt<-z[,1]
     cdm<-z[,2]
-    pf<-function(x,y,...) {
-        m<-loess(y~x)
-        lines(x,predict(m),...,lwd=2)
-    }
     lines(pf(a,irt,...))
     lines(pf(a,cdm,col='red',...))
 }
 f(out1,lty=1)
 f(out2,lty=2)
 legend("bottomright",bty='n',fill=c("black","red"),c("irt","cdm"),title="est")
-
 #####
 plot(NULL,xlim=c(0,3),ylab="IMV",xlab='a',ylim=c(0,.15))
 f<-function(out,...) {
-    om<-lapply(out,function(x) x$om)
-    df<-data.frame(a=a,om=unlist(om))
+    om<-sapply(out,function(x) x$om)
     abline(h=0)
-    m<-loess(om~a,df)
-    pr<-predict(m,df$a,se=TRUE)
-    lines(df$a,pr$fit,lwd=TRUE,...)
-    cc<-col2rgb("red")
-    #polygon(c(df$a,rev(df$a)),c(pr$fit+1.96*pr$se.fit,rev(pr$fit-1.96*pr$se.fit)),border=NA,col=rgb(cc[1],cc[2],cc[3],max=255,alpha=30))
+    pf(a,om[1,],...)
+    pf(a,om[2,],col='blue',...)
+    pf(a,om[3,],col='red',...)
 }
 f(out1,lty=1)
 f(out2,lty=2)

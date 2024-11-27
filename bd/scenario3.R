@@ -43,18 +43,21 @@ simfun<-function(r,N=1000) {
     p.irt<-irt.pr(resp)
     p.cdm<-cdm.pr.marg(resp,qm)
     
-    L<-list(as.matrix(resp),p.true,p.irt,p.cdm)
-    L<-lapply(L,as.numeric)
-    z<-do.call("cbind",L)
-    true<-cor(z)[2,3:4]
+    ## L<-list(as.matrix(resp),p.true,p.irt,p.cdm)
+    ## L<-lapply(L,as.numeric)
+    ## z<-do.call("cbind",L)
+    ## true<-cor(z)[2,3:4]
+    coors<-list()
+    for (i in 1:ncol(resp)) coors[[i]]<-cor(cbind(resp[,i],p.true[,i],p.irt[,i],p.cdm[,i]))
+    ss<-sapply(coors,function(x) x[1,])
+    true<-rowMeans(ss)[3:4]
     
     ##cv imv values
     om<-oos.compare.newresp(resp,qm,truep=p.true)
     list(t=true,om=om)
-
 }
 
-rs<-sort(runif(500,-1,1))
+rs<-sort(runif(100,-1,1))
 library(parallel)
 L<-mclapply(rs,simfun,mc.cores=10)
 
@@ -68,11 +71,13 @@ om<-sapply(L,function(x) x$om)
 
 
 pdf("/home/bdomingu/Dropbox/Apps/Overleaf/CDM_predictions/scenario3.pdf",width=6,height=3)
+
 par(mgp=c(2,1,0),mfrow=c(1,2),mar=c(3,3,1,1),oma=rep(.5,4))
 ##
 irt<-tr[,1]
 cdm<-tr[,2]
 plot(NULL,xlim=c(-1,1),ylim=0:1,xlab=expression(rho),ylab='r(true,est)')
+abline(h=0,col='gray')
 pf<-function(x,y,...) {
     m<-loess(y~x)
     lines(x,predict(m),...,lwd=2)
@@ -81,6 +86,15 @@ lines(pf(rs,irt))
 lines(pf(rs,cdm,col='red'))
 legend("bottomright",bty='n',fill=c("black","red"),c("irt","cdm"),title="est")
 ##
-plot(NULL,xlim=c(-1,1),ylim=c(0,.25),xlab=expression(rho),ylab='IMV(IRT,CDM)')
-lines(pf(rs,om))
+plot(NULL,xlim=c(-1,1),ylim=c(0,.23),xlab=expression(rho),ylab='IMV(IRT,CDM)')
+abline(h=0,col='gray')
+lines(pf(rs,om[1,]))
+lines(pf(rs,om[2,],col='blue',lty=2))
+lines(pf(rs,om[3,],col='red',lty=2))
+legend("topright",bty='n',
+       legend=c("IMV(IRT,CDM)","IMV(IRT,TRUE)","IMV(CDM,TRUE)"),
+       lty=c(1,2,2),col=c("black","blue","red")
+       ,cex=.7
+       )
+       
 dev.off()
