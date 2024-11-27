@@ -201,7 +201,7 @@ all_results <- list()
 
 # Iterate over objects in q_data (adjust the loop as needed for your actual structure)
 for (obj_name in names(q_data)) {
-  if (!substring(obj_name, 1, 9) %in%  c("cdm_timss","cdm_pisa0")){
+  if (!substring(obj_name, 1, 9) %in%  c("cdm_timss","cdm_pisa0", "hmcdm_spa")){
   print(obj_name)
   # Convert the object to a data frame
   df <- q_data[[obj_name]]$to_data_frame()
@@ -237,48 +237,78 @@ final_results
 ```{r}
 # Initialize an empty list to store results
 all_results <- list()
+oos_results <- list()
 
 # Iterate over objects in q_data (adjust the loop as needed for your actual structure)
 for (obj_name in names(q_data)) {
-  if (!substring(obj_name, 1, 9) %in%  c("cdm_timss","cdm_pisa0")){
+  if (!substring(obj_name, 1, 9) %in%  c("cdm_timss","cdm_pisa0", "hmcdm_spa")){
   print(obj_name)
   # Convert the object to a data frame
   df <- q_data[[obj_name]]$to_data_frame()
   
   # Initialize a list to store results for this object
-  object_results <- list()
+  object_1_results <- list()
+  object_2_results <- list()
   
   if ("rt" %in% colnames(df)) {
   df <- df[, !colnames(df) %in% "rt"]
-}
+  }
+  
+  for (i in seq(1, 1, 1)) {
+    result <- func.run.analysis(df, "DINA", FALSE, 0)
+    object_1_results[[i]] <- result
+  }
+  
   # Run the analysis multiple times for this object
-  for (i in seq(1, 2, 1)) {
+  for (i in seq(1, 5, 1)) {
     result <- func.run.analysis(df, "DINA", TRUE, 0.2)
-    object_results[[i]] <- result
+    object_2_results[[i]] <- result
   }
   
   # Combine the results for this object and store them in all_results
-  all_results[[obj_name]] <- do.call(rbind, object_results)
+  all_results[[obj_name]] <- do.call(rbind, object_1_results)
+  oos_results[[obj_name]] <- do.call(rbind, object_2_results)
 }
 }
 # Combine all results into a single data frame
-final_results <- do.call(rbind, lapply(names(all_results), function(name) {
+final_all_results <- do.call(rbind, lapply(names(all_results), function(name) {
   cbind(object = name, all_results[[name]])
 }))
 
-# Print or view the final results
-print(final_results)
+final_oos_results <- do.call(rbind, lapply(names(oos_results), function(name) {
+  cbind(object = name, oos_results[[name]])
+}))
 ```
 
 
 ```{r}
-q_data
+
+
+as.data.frame(final_all_results) %>% 
+  set_names(c("dataname", "imv_all_responses")) %>% 
+  mutate(imv_all_responses = as.numeric(imv_all_responses)) %>% 
+  left_join(as.data.frame(final_oos_results) %>% 
+  set_names(c("dataname", "imv")) %>% 
+  group_by(dataname) %>% 
+  mutate(imv = as.numeric(imv)) %>% 
+  dplyr :: summarise(mean(imv), sd(imv)))
+  
 ```
 
 ```{r}
 df <- q_data$hmcdm_spatialreasoning$to_data_frame()
-hi.1 <- func.run.analysis(df, "DINA", FALSE, 0)
-hi.2 <- func.run.analysis(df, "DINA", TRUE, 0.2)
+df
+func.convert.Q.data.structure.with.held.out(df %>% dplyr ::select(-rt), 0.2)
+#hi.2 <- func.run.analysis(df, "DINA", TRUE, 0.2)
+```
+```{r}
+df %>% 
+  group_by(id) %>% 
+  tally()
+
+df %>% 
+  group_by(item) %>% 
+  tally()
 ```
 
 
