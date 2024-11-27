@@ -127,7 +127,6 @@ cdm.pr.marg<-function(resp,qm,modeltype="DINA") {
   for (i in 1:nrow(qm)) {
     ii<-which(qm[i,]==1)
     z<-map[,ii,drop=FALSE]
-    print(z)
     rm<-apply(z,1,prod)
     p[[i]]<-(1-gs[i,2])*rm + (1-rm)*gs[i,1]
   }

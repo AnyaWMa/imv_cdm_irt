@@ -41,7 +41,7 @@ cdm.sim<-function(a,N=1000,sk.offset=0) {
     names(resp)<-paste("i",1:ncol(resp),sep='')
     
     p.irt<-irt.pr(resp)
-    p.cdm<-cdm.pr(resp,qm)
+    p.cdm<-cdm.pr.marg(resp,qm)
     
     L<-list(as.matrix(resp),p.true,p.irt,p.cdm)
     L<-lapply(L,as.numeric)
@@ -57,8 +57,8 @@ a<-sort(runif(100,min=0,max=3))
 library(parallel)
 out1<-mclapply(a,cdm.sim,mc.cores=10)
 out2<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5)
-#out<-list(out1=out1,out2=out2)
-#save(out,"scenario1.Rdata")
+out<-list(out1=out1,out2=out2)
+save(out,file="scenario1.Rdata")
 
 pdf("/home/bdomingu/Dropbox/Apps/Overleaf/CDM_predictions/scenario1.pdf",width=6,height=3)
 par(mgp=c(2,1,0),mfrow=c(1,2),mar=c(3,3,1,1),oma=rep(.5,4))

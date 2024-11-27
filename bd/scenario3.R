@@ -41,7 +41,7 @@ simfun<-function(r,N=1000) {
     names(resp)<-paste("i",1:ncol(resp),sep='')
     
     p.irt<-irt.pr(resp)
-    p.cdm<-cdm.pr(resp,qm)
+    p.cdm<-cdm.pr.marg(resp,qm)
     
     L<-list(as.matrix(resp),p.true,p.irt,p.cdm)
     L<-lapply(L,as.numeric)
@@ -54,7 +54,7 @@ simfun<-function(r,N=1000) {
 
 }
 
-rs<-sort(runif(1000,-1,1))
+rs<-sort(runif(100,-1,1))
 library(parallel)
 L<-mclapply(rs,simfun,mc.cores=10)
 
