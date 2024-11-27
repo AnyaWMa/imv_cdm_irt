@@ -89,3 +89,47 @@ oos.compare.newresp<-function(resp,qm,truep) {
     imv::imv.binary(df$resp,df$p.irt,df$p.cdm)
 }
 
+
+oos.compare.newresp.2q<-function(resp,qm1,qm2,truep) {
+    id<-1:nrow(resp)
+    item<-names(resp)
+    L<-list()
+    for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],resp=resp[,i],truep=truep[,i])
+    df<-do.call("rbind",L)
+    om<-numeric()
+    x<-irw::long2resp(df)
+    id<-x$id
+    x<-x[,names(resp)]
+    ##cdm1
+    p.cdm<-cdm.pr(x,qm1)
+    L<-list()
+    for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],p.cdm1=p.cdm[,i])
+    p<-do.call("rbind",L)
+    df<-merge(df,p)
+    ##cdm2
+    p.cdm<-cdm.pr(x,qm2)
+    L<-list()
+    for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],p.cdm2=p.cdm[,i])
+    p<-do.call("rbind",L)
+    df<-merge(df,p)
+    ##
+    df$resp<-rbinom(nrow(df),1,df$truep) ##obliterate old response
+    imv::imv.binary(df$resp,df$p.cdm1,df$p.cdm2)
+}
+
+cdm.pr.marg<-function(resp,qm,modeltype="DINA") {
+  ##cdm pvalues
+  library(GDINA)
+  m <- GDINA(resp,qm,modeltype)
+  map <- personparm(m, what = "mp")[,1:ncol(qm)]
+  gs<-coef(m,what='gs')
+  p<-list()
+  for (i in 1:nrow(qm)) {
+    ii<-which(qm[i,]==1)
+    z<-map[,ii,drop=FALSE]
+    print(z)
+    rm<-apply(z,1,prod)
+    p[[i]]<-(1-gs[i,2])*rm + (1-rm)*gs[i,1]
+  }
+  p.cdm<-do.call("cbind",p)
+}

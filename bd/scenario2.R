@@ -6,7 +6,7 @@ source("00funs.R")
 
 irt.sim<-function(a,N=1000) {
     th<-rnorm(N)
-    b<-sort(rnorm(50,sd=.3))
+    b<-sort(rnorm(10,sd=.3))
     th.mat<-matrix(th,length(th),length(b),byrow=FALSE)
     b.mat<-matrix(b,length(th),length(b),byrow=TRUE)
     k<-th.mat-b.mat
@@ -19,7 +19,7 @@ irt.sim<-function(a,N=1000) {
     resp<-as.data.frame(resp)
     names(resp)<-paste("i",1:ncol(resp),sep='')
     ##make up q matrix
-    sk<-rnorm(10)
+    sk<-rnorm(3)
     p<-outer(b,sk,'-')
     p<-apply(p,2,function(x) 1/(1+exp(-a*x)))
     qm<-p
@@ -74,7 +74,7 @@ lines(pf(a,om))
 
 irt.sim<-function(n,N=1000) {
     th<-rnorm(N)
-    b<-sort(rnorm(50,sd=.3))
+    b<-sort(rnorm(50,sd=1))
     th.mat<-matrix(th,length(th),length(b),byrow=FALSE)
     b.mat<-matrix(b,length(th),length(b),byrow=TRUE)
     k<-th.mat-b.mat
@@ -89,32 +89,27 @@ irt.sim<-function(n,N=1000) {
 
     ##make up q matrix
     out<-list()
-    for (a in c(0,1.5)) {
+    a<-c(0,runif(1,min=0,max=1.5))
+    qmL<-list()
+    for (ii in 1:length(a)) {
         sk<-rnorm(n)
         p<-outer(b,sk,'-')
-        p<-apply(p,2,function(x) 1/(1+exp(-a*x)))
+        p<-apply(p,2,function(x) 1/(1+exp(-a[ii]*x)))
         qm<-p
         S<-TRUE
         while (S) {
-            for (i in 1:n) qm[,i]<-rbinom(nrow(qm),1,.5)
-            for (i in 1:nrow(qm)) qm[i,]<-rbinom(ncol(qm),1,p[i,])
+            for (i in 1:n) qm[,i]<-rbinom(nrow(qm),1,p[,i])
             S<-any(c(colMeans(qm),rowMeans(qm))==0)
         }            
-        
-        p.irt<-irt.pr(resp)
-        p.cdm<-cdm.pr(resp,qm)
-        
-        L<-list(as.matrix(resp),p.true,p.irt,p.cdm)
-        L<-lapply(L,as.numeric)
-        z<-do.call("cbind",L)
-        true<-cor(z)[2,3:4]
-        
-        ##cv imv values
-        om<-oos.compare.newresp(resp,qm,truep=p.true)
-        out[[as.character(a)]]<-list(t=true,om=om)
+        qmL[[ii]]<-qm
     }
-    out
+
+    om<-oos.compare.newresp.2q(resp,qmL[[1]],qmL[[2]],truep=p.true)
+    c(n,a[2],om)
 }
 library(parallel)
-nn<-sample(c(5,8,11),50,replace=TRUE)
-z<-mclapply(nn,irt.sim,mc.cores=10)
+nn<-c(rep(3,10),rep(6,10))
+z<-mclapply(nn,irt.sim,mc.cores=10,N=2500)
+
+
+
