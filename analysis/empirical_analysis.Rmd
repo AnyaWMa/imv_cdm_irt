@@ -144,13 +144,13 @@ func.convert.Q.data.structure.with.held.out <- function(df, heldout_rate){
 
 ## OOS prediction
 ```{r}
-func.run.analysis <- function(df, cdm_model, if_oos, heldout_rate){
+func.run.analysis <- function(df, cdm_model, if_oos, heldout_rate, cdm_pr_estimate = cdm.pr){
   n_items = n_distinct(df$item)
   item_list <- sort(unique(df$item))
   
   df.cdm.structure <- func.convert.Q.data.structure.with.held.out(df, heldout_rate)
   
-  predict.matrix <- cdm.pr(df.cdm.structure$dat,df.cdm.structure$Q, model = "DINA")
+  predict.matrix <- cdm_pr_estimate(df.cdm.structure$dat,df.cdm.structure$Q, model = "DINA")
   
   result <- as.data.frame(predict.matrix) %>% 
     set_names(item_list) %>% 
@@ -185,7 +185,7 @@ func.run.analysis <- function(df, cdm_model, if_oos, heldout_rate){
     filter(!is.na(prediction.irt), !is.na(prediction.cdm))
   }
   
-  imv <- imv.binary(df.test$resp, df.test$prediction.irt, df.test$prediction.cdm)
+  imv <- imv::imv.binary(df.test$resp, df.test$prediction.irt, df.test$prediction.cdm)
   print(imv)
   return (imv)
 }
@@ -194,46 +194,11 @@ func.run.analysis <- function(df, cdm_model, if_oos, heldout_rate){
 
 # Empirical analysis
 
-
 ```{r}
-# Initialize an empty list to store results
-all_results <- list()
-
-# Iterate over objects in q_data (adjust the loop as needed for your actual structure)
-for (obj_name in names(q_data)) {
-  if (!substring(obj_name, 1, 9) %in%  c("cdm_timss","cdm_pisa0", "hmcdm_spa")){
-  print(obj_name)
-  # Convert the object to a data frame
-  df <- q_data[[obj_name]]$to_data_frame()
-  
-  # Initialize a list to store results for this object
-  object_results <- list()
-  
-  if ("rt" %in% colnames(df)) {
-  df <- df[, !colnames(df) %in% "rt"]
-}
-  # Run the analysis multiple times for this object
-  for (i in seq(1, 1, 1)) {
-    result <- func.run.analysis(df, "DINA", FALSE, 0)
-    object_results[[i]] <- result
-  }
-  
-  # Combine the results for this object and store them in all_results
-  all_results[[obj_name]] <- do.call(rbind, object_results)
-}
-}
-# Combine all results into a single data frame
-final_results <- do.call(rbind, lapply(names(all_results), function(name) {
-  cbind(object = name, all_results[[name]])
-}))
-
-# Print or view the final results
-print(final_results)
-```
-```{r}
-final_results
+set.seed(10)
 ```
 
+## using CDM ability estimate 0/1
 ```{r}
 # Initialize an empty list to store results
 all_results <- list()
@@ -282,7 +247,7 @@ final_oos_results <- do.call(rbind, lapply(names(oos_results), function(name) {
 
 
 ```{r}
-as.data.frame(final_all_results) %>% 
+df.imv.compare.1 <- as.data.frame(final_all_results) %>% 
   set_names(c("dataname", "imv_all_responses")) %>% 
   mutate(imv_all_responses = as.numeric(imv_all_responses)) %>% 
   left_join(as.data.frame(final_oos_results) %>% 
@@ -293,4 +258,68 @@ as.data.frame(final_all_results) %>%
   
 ```
 
+## using cdm.pr.marg
+```{r}
+# Initialize an empty list to store results
+all_results <- list()
+oos_results <- list()
+
+# Iterate over objects in q_data (adjust the loop as needed for your actual structure)
+for (obj_name in names(q_data)) {
+  if (!substring(obj_name, 1, 9) %in%  c("cdm_timss","cdm_pisa0", "hmcdm_spa")){
+  print(obj_name)
+  # Convert the object to a data frame
+  df <- q_data[[obj_name]]$to_data_frame()
+  
+  # Initialize a list to store results for this object
+  object_1_results <- list()
+  object_2_results <- list()
+  
+  if ("rt" %in% colnames(df)) {
+  df <- df[, !colnames(df) %in% "rt"]
+  }
+  
+  for (i in seq(1, 1, 1)) {
+    result <- func.run.analysis(df, "DINA", FALSE, 0, cdm.pr.marg)
+    object_1_results[[i]] <- result
+  }
+  
+  # Run the analysis multiple times for this object
+  for (i in seq(1, 5, 1)) {
+    result <- func.run.analysis(df, "DINA", TRUE, 0.2, cdm.pr.marg)
+    object_2_results[[i]] <- result
+  }
+  
+  # Combine the results for this object and store them in all_results
+  all_results[[obj_name]] <- do.call(rbind, object_1_results)
+  oos_results[[obj_name]] <- do.call(rbind, object_2_results)
+}
+}
+# Combine all results into a single data frame
+final_all_results <- do.call(rbind, lapply(names(all_results), function(name) {
+  cbind(object = name, all_results[[name]])
+}))
+
+final_oos_results <- do.call(rbind, lapply(names(oos_results), function(name) {
+  cbind(object = name, oos_results[[name]])
+}))
+```
+
+```{r}
+df.imv.compare.2 <- as.data.frame(final_all_results) %>% 
+  set_names(c("dataname", "imv_all_responses")) %>% 
+  mutate(imv_all_responses_marg = as.numeric(imv_all_responses)) %>% 
+  dplyr :: select(-imv_all_responses) %>% 
+  left_join(as.data.frame(final_oos_results) %>% 
+  set_names(c("dataname", "imv")) %>% 
+  group_by(dataname) %>% 
+  mutate(imv_marg = as.numeric(imv)) %>% 
+  dplyr :: summarise(mean(imv_marg), sd(imv_marg)))
+  
+```
+
+```{r}
+df.imv.compare.2 %>% 
+  right_join(df.imv.compare.1)
+```
 
