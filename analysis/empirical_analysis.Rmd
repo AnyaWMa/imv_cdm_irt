@@ -282,8 +282,6 @@ final_oos_results <- do.call(rbind, lapply(names(oos_results), function(name) {
 
 
 ```{r}
-
-
 as.data.frame(final_all_results) %>% 
   set_names(c("dataname", "imv_all_responses")) %>% 
   mutate(imv_all_responses = as.numeric(imv_all_responses)) %>% 
@@ -295,24 +293,4 @@ as.data.frame(final_all_results) %>%
   
 ```
 
-```{r}
-df <- q_data$hmcdm_spatialreasoning$to_data_frame()
-df
-func.convert.Q.data.structure.with.held.out(df %>% dplyr ::select(-rt), 0.2)
-#hi.2 <- func.run.analysis(df, "DINA", TRUE, 0.2)
-```
-```{r}
-df %>% 
-  group_by(id) %>% 
-  tally()
-
-df %>% 
-  group_by(item) %>% 
-  tally()
-```
-
-
-```{r}
-func.convert.Q.data.structure.with.held.out(df, 0)
-```
 
