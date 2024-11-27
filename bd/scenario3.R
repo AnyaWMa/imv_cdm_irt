@@ -58,7 +58,7 @@ rs<-sort(runif(100,-1,1))
 library(parallel)
 L<-mclapply(rs,simfun,mc.cores=10)
 
-dump("L","")
+save(L,file="scenario3.Rdata")
 
 
 tr<-lapply(L,function(x) x$t)
