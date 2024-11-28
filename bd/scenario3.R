@@ -57,7 +57,7 @@ simfun<-function(r,N=1000) {
     list(t=true,om=om)
 }
 
-rs<-sort(runif(100,-1,1))
+rs<-sort(runif(250,-1,1))
 library(parallel)
 L<-mclapply(rs,simfun,mc.cores=10)
 
@@ -71,7 +71,6 @@ om<-sapply(L,function(x) x$om)
 
 
 pdf("/home/bdomingu/Dropbox/Apps/Overleaf/CDM_predictions/scenario3.pdf",width=6,height=3)
-
 par(mgp=c(2,1,0),mfrow=c(1,2),mar=c(3,3,1,1),oma=rep(.5,4))
 ##
 irt<-tr[,1]
