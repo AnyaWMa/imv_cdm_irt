@@ -52,6 +52,19 @@ dataset <- redivis::user("datapages")$dataset("item_response_warehouse",version=
 
 dataset_tables <- dataset$list_tables()
 ```
+```{r}
+load("data/frac20test.RData")
+```
+```{r}
+df.frac20.test <- df
+```
+
+```{r}
+fit1 <- GDINA(dat = frac20$dat, Q = frac20$Q, model = "DINA")
+coef(object = fit1, what = "delta")
+
+as.data.frame(coef(object = fit1, what = "gs"))
+```
 
 ## Get CDM data
 ```{r}
@@ -116,53 +129,176 @@ func.convert.Q.data.structure.with.held.out <- function(df, heldout_rate){
 }
 ```
 
+```{r}
+func.convert.Q.data.structure.with.k.fold <- function(df, kfold){
+  Q <- df %>% 
+     dplyr ::select(-c(id, resp)) %>% 
+    unique() %>% 
+     dplyr ::arrange(item) %>% 
+     dplyr ::select(-c(item))
+  
+  Q <- Q[, order(colnames(Q))]
+  
+  assignments <- sample(rep(1:kfold, length.out = length(df$id)))
+  
+  df.kfold <- df %>% 
+     dplyr ::select(item, id, resp) %>% 
+    dplyr :: arrange(item) %>% 
+    add_column(gr = assignments) %>% 
+     dplyr ::arrange(id)
+  
+  tables_list <- list()
+  tables_list[['Q']] <- Q
+  tables_list[['dat_kfold']] <- df.kfold
+  
+  return (tables_list)
+}
+
+```
+
 
 ## OOS prediction
 ```{r}
-func.run.analysis <- function(df, cdm_model, if_oos, heldout_rate, cdm_pr_estimate = cdm.pr){
+# func.run.analysis <- function(df, cdm_model, if_oos, heldout_rate, cdm_pr_estimate = cdm.pr){
+#   n_items = n_distinct(df$item)
+#   item_list <- sort(unique(df$item))
+#   
+#   df.cdm.structure <- func.convert.Q.data.structure.with.held.out(df, heldout_rate)
+#   
+#   predict.matrix <- cdm_pr_estimate(df.cdm.structure$dat,df.cdm.structure$Q, model = cdm_model)
+#   
+#   result <- as.data.frame(predict.matrix) %>% 
+#     set_names(item_list) %>% 
+#     mutate(id = row_number()) %>% 
+#     pivot_longer(cols = item_list, names_to = "item", values_to = "prediction.cdm") %>% 
+#     left_join(df.cdm.structure$heldout)
+#  
+#   # IRT model
+#   mod.irt <- mirt(df.cdm.structure$dat, 1, itemtype = "2PL")
+#   
+#   thetas <- as.data.frame(fscores(mod.irt))
+#   
+#   params <- data.frame(coef(mod.irt, IRTpars = TRUE, simplify = TRUE))
+#   
+#   result.2 <- tibble(th = thetas$F1, id = df.cdm.structure$id) %>%
+#     left_join(df.cdm.structure$heldout) %>% 
+#     left_join(rownames_to_column(params, var = "item")) %>% 
+#     mutate(prediction.irt = prob.irt(items.a, items.b, th)) %>% 
+#      dplyr ::select(id, item, resp, held_out, prediction.irt)
+#   
+#   result.compared <- result %>% 
+#     left_join(result.2) 
+#   
+#   
+#   
+#   if (if_oos) {
+#     df.test <- result.compared %>% 
+#     filter(held_out == 1) %>% 
+#     filter(!is.na(prediction.irt), !is.na(prediction.cdm))
+#   } else {
+#     df.test <- result.compared %>% 
+#     filter(!is.na(prediction.irt), !is.na(prediction.cdm))
+#   }
+#   
+#   imv <- imv::imv.binary(df.test$resp, df.test$prediction.irt, df.test$prediction.cdm)
+#   print(imv)
+#   return (imv)
+# }
+```
+
+
+```{r}
+func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", if_oos = TRUE, kfold = 5, cdm_pr_estimate = cdm.pr.marg){
   n_items = n_distinct(df$item)
   item_list <- sort(unique(df$item))
   
-  df.cdm.structure <- func.convert.Q.data.structure.with.held.out(df, heldout_rate)
+  df.cdm.structure <- func.convert.Q.data.structure.with.k.fold(df, kfold = kfold)
   
-  predict.matrix <- cdm_pr_estimate(df.cdm.structure$dat,df.cdm.structure$Q, model = cdm_model)
-  
-  result <- as.data.frame(predict.matrix) %>% 
-    set_names(item_list) %>% 
-    mutate(id = row_number()) %>% 
-    pivot_longer(cols = item_list, names_to = "item", values_to = "prediction.cdm") %>% 
-    left_join(df.cdm.structure$heldout)
- 
-  # IRT model
-  mod.irt <- mirt(df.cdm.structure$dat, 1, itemtype = "2PL")
-  
-  thetas <- as.data.frame(fscores(mod.irt))
-  
-  params <- data.frame(coef(mod.irt, IRTpars = TRUE, simplify = TRUE))
-  
-  result.2 <- tibble(th = thetas$F1, id = df.cdm.structure$id) %>%
-    left_join(df.cdm.structure$heldout) %>% 
-    left_join(rownames_to_column(params, var = "item")) %>% 
-    mutate(prediction.irt = prob.irt(items.a, items.b, th)) %>% 
-     dplyr ::select(id, item, resp, held_out, prediction.irt)
-  
-  result.compared <- result %>% 
-    left_join(result.2) 
-  
-  
-  
-  if (if_oos) {
-    df.test <- result.compared %>% 
-    filter(held_out == 1) %>% 
-    filter(!is.na(prediction.irt), !is.na(prediction.cdm))
-  } else {
-    df.test <- result.compared %>% 
-    filter(!is.na(prediction.irt), !is.na(prediction.cdm))
+  func.get.prediction.result <- function(df.tmp, dat, qm){
+    # CDM model
+    df.dat <- dat %>% 
+      dplyr ::select(-gr) %>% 
+      dplyr :: arrange(item) %>% 
+      pivot_wider(names_from = item, values_from = resp) %>% 
+      dplyr ::arrange(id) 
+    
+    df.dat.no.id <- df.dat %>% dplyr :: select(-id)
+    
+    predict.matrix <- cdm_pr_estimate(df.dat.no.id, qm, model = cdm_model)
+    
+    result <- as.data.frame(predict.matrix) %>% 
+      set_names(item_list) %>% 
+      mutate(id = row_number()) %>% 
+      pivot_longer(cols = item_list, names_to = "item", values_to = "prediction.cdm") %>% 
+      left_join(df.tmp)
+    
+    # IRT model
+    mod.irt <- mirt(df.dat.no.id, 1, itemtype = irt_model)
+    
+    thetas <- as.data.frame(fscores(mod.irt))
+
+    params <- data.frame(coef(mod.irt, IRTpars = TRUE, simplify = TRUE))
+    
+    result.2 <- tibble(th = thetas$F1, id = df.dat$id) %>%
+      left_join(df.tmp) %>% 
+      left_join(rownames_to_column(params, var = "item")) %>% 
+      mutate(prediction.irt = prob.irt(items.a, items.b, th)) %>% 
+      dplyr ::select(id, item, resp, gr, prediction.irt)
+    
+    result.compared <- result %>% 
+      left_join(result.2) 
   }
   
-  imv <- imv::imv.binary(df.test$resp, df.test$prediction.irt, df.test$prediction.cdm)
-  print(imv)
-  return (imv)
+  list.imv <- list()
+  
+  list.cor <- list()
+  
+  if (!if_oos) {
+    # full data set
+    result.compared <- func.get.prediction.result(df.cdm.structure$dat_kfold, df.cdm.structure$dat_kfold, df.cdm.structure$Q)
+    
+    df.compare <- result.compared %>% 
+        filter(!is.na(prediction.irt), !is.na(prediction.cdm))
+      
+    imv <- imv::imv.binary(df.compare$resp, df.compare$prediction.irt, df.compare$prediction.cdm)
+    
+    cor <- cor(df.compare$prediction.irt, df.compare$prediction.cdm)
+      
+    list.imv <- c(list.imv, imv) 
+    
+    list.cor <- c(list.cor, cor)
+    
+  }
+  else {
+    for (i in seq(1, kfold, 1)) {
+      df.tmp <- df.cdm.structure$dat_kfold
+      
+      df.train <- df.tmp %>% 
+        filter(gr != i) 
+      
+      result.compared <- func.get.prediction.result(df.tmp, df.train, df.cdm.structure$Q)
+      
+      df.compare <- result.compared %>% 
+        filter(gr == i) %>% 
+        filter(!is.na(prediction.irt), !is.na(prediction.cdm))
+      
+      imv <- imv::imv.binary(df.compare$resp, df.compare$prediction.irt, df.compare$prediction.cdm)
+      
+      cor <- cor(df.compare$prediction.irt, df.compare$prediction.cdm)
+      
+      list.imv <- c(list.imv, imv) 
+      
+      list.cor <- c(list.cor, cor)
+    }
+  }
+  
+  imv_reuslt <- list()
+  imv_reuslt[['imv_mean']] <- mean(unlist(list.imv))
+  imv_reuslt[['imv_sd']] <- sd(unlist(list.imv))
+  imv_reuslt[['cor_mean']] <- mean(unlist(list.cor))
+  imv_reuslt[['cor_sd']] <- sd(unlist(list.cor))
+  
+  return(imv_reuslt)
 }
 ```
 
@@ -172,28 +308,24 @@ func.run.analysis <- function(df, cdm_model, if_oos, heldout_rate, cdm_pr_estima
 ## sanity check 
 
 ### Q1: check if q_matrix is correct?
+
 ```{r}
-frac20_irw <- q_data$frac20$to_data_frame()
+frac20_irw <- q_data$frac20$to_data_frame() 
 
 item_list <- sort(unique(frac20_irw $item))
 
-df.cdm.structure <- func.convert.Q.data.structure.with.held.out(frac20_irw, 0)
-```
-```{r}
-df.qmatrix.irw <- df.cdm.structure$Q %>% 
-  add_column(item = item_list) %>% 
-  mutate(item_num = as.numeric(gsub("\\D", "", item))) %>% 
-  arrange(item_num) %>% 
-  dplyr :: select(-c(item, item_num)) %>% 
-  as.matrix()
-```
-```{r}
-matrix1_unnamed <- unname(df.qmatrix.irw)
-matrix2_unnamed <- unname(frac20$Q %>% as.matrix())
-
-identical(matrix1_unnamed, matrix2_unnamed)
+df.cdm.structure <- func.convert.Q.data.structure.with.held.out(frac20_irw, 0.2)
 ```
 
+```{r}
+hi <- func.run.analysis.debug(frac20_irw, "DINA", TRUE, cdm_pr_estimate = cdm.pr.marg)
+```
+```{r}
+hi <- func.run.analysis.kfold(frac20_irw, "DINA", "2PL", TRUE, 5, cdm.pr.marg)
+```
+```{r}
+func.run.analysis.kfold(frac20_irw, "DINA", "2PL", FALSE, 5, cdm.pr.marg)
+```
 ### Q2: check if frac20 cdm prediction makes sense?
 
 ```{r}
@@ -226,38 +358,42 @@ prediction correlation between cdm and irt
 ```{r}
 cor(result.compared$prediction.cdm, result.compared$prediction.irt)
 ```
+```{r}
+hi <- result.compared %>% 
+  filter(held_out == 0) 
+
+imv::imv.binary(hi$resp, hi$prediction.irt, hi$prediction.cdm)
+```
 
 ### Q3: check if any item?
 ```{r}
-df.item.check <- result.compared %>% 
-    mutate(prediction.cdm.binary = ifelse(runif(n()) < prediction.cdm, 1, 0),  # Roll dice based on prediction.cdm probability
-         prediction.irt.binary = ifelse(runif(n()) < prediction.irt, 1, 0)   # Roll dice based on prediction.irt probability
-         ) %>% 
-  mutate(cdm.correct = ifelse(resp == prediction.cdm.binary, 1, 0), 
-         irt.correct = ifelse(resp == prediction.irt.binary, 1, 0)) %>% 
-  group_by(item, held_out) %>% 
-  dplyr :: summarise(p.cdm.correct = mean(cdm.correct), p.irt.correct = mean(irt.correct)) %>% 
-  arrange(p.cdm.correct)
-```
-
-```{r}
-ggplot(df.item.check %>% mutate(held_out = as.character(held_out)),
-       mapping = aes(x = p.cdm.correct, 
-                     y = p.irt.correct, 
-                     color = held_out)) +
-  # Connect points with the same 'item'
-  geom_line(aes(group = item), color = "gray") +  # Lines for same 'item'
-  geom_text(aes(label = item)) +  # Text labels for items
-  scale_color_manual(values = c("black", "darkred")) + 
-  xlim(0.3, 1) + ylim(0.3, 1) + 
-  coord_equal() +
-  theme_minimal() + stat_cor()
+# df.item.check <- result.compared %>% 
+#     mutate(prediction.cdm.binary = ifelse(runif(n()) < prediction.cdm, 1, 0),  # Roll dice based on prediction.cdm probability
+#          prediction.irt.binary = ifelse(runif(n()) < prediction.irt, 1, 0)   # Roll dice based on prediction.irt probability
+#          ) %>% 
+#   mutate(cdm.correct = ifelse(resp == prediction.cdm.binary, 1, 0), 
+#          irt.correct = ifelse(resp == prediction.irt.binary, 1, 0)) %>% 
+#   group_by(item, held_out) %>% 
+#   dplyr :: summarise(p.cdm.correct = mean(cdm.correct), p.irt.correct = mean(irt.correct)) %>% 
+#   arrange(p.cdm.correct)
+# 
+# ggplot(df.item.check %>% mutate(held_out = as.character(held_out)),
+#        mapping = aes(x = p.cdm.correct, 
+#                      y = p.irt.correct, 
+#                      color = held_out)) +
+#   # Connect points with the same 'item'
+#   geom_line(aes(group = item), color = "gray") +  # Lines for same 'item'
+#   geom_text(aes(label = item)) +  # Text labels for items
+#   scale_color_manual(values = c("black", "darkred")) + 
+#   xlim(0.3, 1) + ylim(0.3, 1) + 
+#   coord_equal() +
+#   theme_minimal() + stat_cor()
 ```
 
 ## Run all data
 
 ```{r}
-func.run.empirical.data <- function(cdm_model = "DINA", cdm_pr_estimate = cdm.pr, iterations = 5) {
+func.run.empirical.data <- function(cdm_model = "DINA", irt_model = "2PL", cdm_pr_estimate = cdm.pr) {
   # Initialize empty lists to store results
   all_results <- list()
   oos_results <- list()
@@ -280,14 +416,13 @@ func.run.empirical.data <- function(cdm_model = "DINA", cdm_pr_estimate = cdm.pr
       }
       
       # Run the first type of analysis once
-      result <- func.run.analysis(df, cdm_model, FALSE, 0, cdm_pr_estimate)
+      result <- func.run.analysis.kfold(df, cdm_model, irt_model, FALSE, 5, cdm.pr.marg)
       object_1_results[[i]] <- result
       
       # Run the second type of analysis multiple times
-      for (i in seq(1, iterations, 1)) {
-        result <- func.run.analysis(df, cdm_model, TRUE, 0.2, cdm_pr_estimate)
-        object_2_results[[i]] <- result
-      }
+      result <- func.run.analysis.kfold(df, cdm_model, irt_model, TRUE, 5, cdm.pr.marg)
+      object_2_results[[i]] <- result
+    
       
       # Combine results for this object and store them in lists
       all_results[[obj_name]] <- do.call(rbind, object_1_results)
@@ -304,31 +439,34 @@ func.run.empirical.data <- function(cdm_model = "DINA", cdm_pr_estimate = cdm.pr
     cbind(object = name, oos_results[[name]])
   }))
   
-  # Create the comparison data frame
-  df.imv.compare <- as.data.frame(final_all_results) %>%
-    set_names(c("dataname", "imv_all_responses")) %>%
-    mutate(imv_all_responses = as.numeric(imv_all_responses)) %>%
-    left_join(
-      as.data.frame(final_oos_results) %>%
-        set_names(c("dataname", "imv")) %>%
-        group_by(dataname) %>%
-        mutate(imv = as.numeric(imv)) %>%
-        dplyr::summarise(mean_imv = mean(imv), sd_imv = sd(imv))
-    )
+  df.imv.result <- as.data.frame(final_all_results) %>% 
+  dplyr :: select(object, imv_mean, cor_mean) %>% 
+  set_names("dataname", "imv_all_response", "cor_all_response") %>% 
+  mutate(dataname = as.character(dataname),
+    imv_all_response = as.numeric(imv_all_response), 
+         cor_all_response = as.numeric(cor_all_response)) %>% 
+  left_join(as.data.frame(final_oos_results) %>% 
+              set_names("dataname", "imv_kfold_response", "imv_kfold_response_sd", "cor_kfold_response", "cor_kfold_response_sd") %>% 
+  mutate(dataname = as.character(dataname),
+    imv_kfold_response = as.numeric(imv_kfold_response), 
+         imv_kfold_response_sd = as.numeric(imv_kfold_response_sd), 
+         cor_kfold_response = as.numeric(cor_kfold_response), 
+         cor_kfold_response_sd = as.numeric(cor_kfold_response_sd)))
   
   # Return the comparison data frame
-  return(df.imv.compare)
+  return(df.imv.result)
 }
 ```
 
+## 2PL 
 ```{r}
 set.seed(10)
 
-df.imv.compare.1 <- func.run.empirical.data(model = "DINA")
+df.imv.compare.1 <- func.run.empirical.data(cdm_model = "DINA", irt_model = "2PL")
 
-df.imv.compare.2 <- func.run.empirical.data(cdm_model = "DINO")
+df.imv.compare.2 <- func.run.empirical.data(cdm_model = "DINO", irt_model = "2PL")
 
-df.imv.compare.3 <- func.run.empirical.data(cdm_model = "GDINA")
+df.imv.compare.3 <- func.run.empirical.data(cdm_model = "GDINA", irt_model = "2PL")
 ```
 
 ```{r}
@@ -337,7 +475,20 @@ df.imv.compare.result <- df.imv.compare.1 %>%
   rbind(df.imv.compare.2 %>% mutate(cdm_model = "DINO")) %>% 
   rbind(df.imv.compare.3 %>% mutate(cdm_model = "GDINA")) %>% 
   relocate(dataname, cdm_model) %>% 
-  arrange(dataname)
+  arrange(dataname) %>% 
+  dplyr :: select(dataname, cdm_model, "imv_all_response", "imv_kfold_response", "imv_kfold_response_sd")
+```
+
+
+## 1PL 
+```{r}
+set.seed(10)
+
+df.imv.compare.1.1pl <- func.run.empirical.data(cdm_model = "DINA", irt_model = "Rasch")
+
+df.imv.compare.2.1pl <- func.run.empirical.data(cdm_model = "DINO", irt_model = "Rasch")
+
+df.imv.compare.3.1pl <- func.run.empirical.data(cdm_model = "GDINA", irt_model = "Rasch")
 ```
 
 # LaTeX table
