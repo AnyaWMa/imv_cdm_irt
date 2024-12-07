@@ -491,7 +491,7 @@ df.imv.compare.2.1pl <- func.run.empirical.data(cdm_model = "DINO", irt_model = 
 df.imv.compare.3.1pl <- func.run.empirical.data(cdm_model = "GDINA", irt_model = "Rasch")
 ```
 
-# LaTeX table
+## LaTeX table
 ```{r}
 library(kableExtra)
 ```
@@ -504,4 +504,200 @@ table_latex <- kable(df.imv.compare.result, format = "latex", caption = "IMV(2PL
 # Print LaTeX Code
 cat(table_latex)
 ```
+## Parameter Analysis
+```{r}
+func.convert.Q.data.structure.with.held.out <- function(df, heldout_rate){
+  Q <- df %>% 
+     dplyr ::select(-c(id, resp)) %>% 
+    unique() %>% 
+     dplyr ::arrange(item) %>% 
+     dplyr ::select(-c(item))
+  
+  df.held.out <- df %>% 
+     dplyr ::select(item, id, resp) %>% 
+    dplyr :: arrange(item) %>% 
+    mutate(held_out = rbinom(n = n(), size = 1, prob = heldout_rate)) %>% 
+     dplyr ::arrange(id)
+  
+  df.dat <- df.held.out %>% 
+    filter(held_out == 0) %>% 
+     dplyr ::select(-c(held_out)) %>% 
+     dplyr :: arrange(item) %>% 
+    pivot_wider(names_from = item, values_from = resp) %>% 
+     dplyr ::arrange(id) 
+  
+  tables_list <- list()
+  tables_list[['Q']] <- Q
+  tables_list[['dat']] <- df.dat %>%  dplyr ::select(-id)
+  tables_list[['heldout']] <- df.held.out
+  tables_list[['id']] <- df.dat$id
+  
+  
+  return (tables_list)
+}
+```
+
+```{r}
+df.tmp <- q_data$frac20
+
+df.tmp <- df.tmp$to_data_frame()
+
+
+```
+```{r}
+df.cdm.structure <- func.convert.Q.data.structure.with.held.out(df.tmp, 0)
+```
+
+
+```{r}
+item_list <- sort(unique(df.tmp$item))
+
+fit1 <- GDINA(dat = df.cdm.structure$dat, Q = df.cdm.structure$Q, model = "DINA")
+
+cdm.params <- as.data.frame(coef(object = fit1, what = "gs")) %>% 
+  add_column(item = item_list)
+
+mod.irt <- mirt(df.cdm.structure$dat, 1, itemtype = "2PL")
+  
+params <- data.frame(coef(mod.irt, IRTpars = TRUE, simplify = TRUE))
+  
+irt.params <- params %>% 
+    left_join(rownames_to_column(params, var = "item")) 
+
+result <- cdm.params %>% 
+  left_join(irt.params)
+
+
+```
+
+```{r}
+get.item.params <- function(q_data){
+  result.final <- tibble()
+  for (obj_name in names(q_data)) {
+    if (!substring(obj_name, 1, 9) %in% c("cdm_timss", "cdm_pisa0", "hmcdm_spa")) {
+      print(obj_name)
+      
+      # Convert the object to a data frame
+      df.tmp <- q_data[[obj_name]]$to_data_frame()
+      
+      df.cdm.structure <- func.convert.Q.data.structure.with.held.out(df.tmp, 0)
+      
+      item_list <- sort(unique(df.tmp$item))
+      
+      fit1 <- GDINA(dat = df.cdm.structure$dat, Q = df.cdm.structure$Q, model = "DINA")
+      
+      cdm.params <- as.data.frame(coef(object = fit1, what = "gs")) %>% 
+        add_column(item = item_list)
+      
+      mod.irt <- mirt(df.cdm.structure$dat, 1, itemtype = "2PL")
+      params <- data.frame(coef(mod.irt, IRTpars = TRUE, simplify = TRUE))
+      
+      irt.params <- params %>% 
+        left_join(rownames_to_column(params, var = "item")) 
+      
+      result <- cdm.params %>% 
+        left_join(irt.params) %>% 
+        add_column(dataname = obj_name)
+      
+      result.final <- result.final %>% rbind(result)
+    }
+  }
+  return (result.final)
+
+}
+```
+
+
+```{r}
+df.params.empirical <- get.item.params(q_data)
+```
+
+```{r}
+df.params.empirical.clean <- df.params.empirical %>% 
+  dplyr :: rename(g = guessing, s = slip, a = items.a, b = items.b) %>% 
+  dplyr :: select(dataname, item, a, b, g, s)
+```
+
+
+```{r}
+create_ggpairs <- function(data, title) {
+  ggpairs(
+    data,
+    columns = c("a", "b", "g", "s"),       # Columns for scatterplot matrix
+    mapping = aes(label = item),          # Map 'item' as point label
+    title = title
+  ) + theme_bw()
+}
+
+for (i in unique(df.params.empirical.clean$dataname)) {
+  create_ggpairs(df.params.empirical.clean %>% filter(dataname == i), i)
+}
+
+```
+```{r}
+# Store the plots in a list
+plot_list <- list()
+
+# Loop through unique datanames and create ggpairs plots
+for (i in unique(df.params.empirical.clean$dataname)) {
+  plot_list[[i]] <- create_ggpairs(
+    df.params.empirical.clean %>% filter(dataname == i),
+    i
+  )
+}
+
+
+```
+
+```{r}
+pdf("plots/empirical_scatterplot_frac20.pdf", width = 5, height = 5)
+
+# Print the plot to the PDF device
+print(plot_list$frac20)
+
+dev.off()
+
+pdf("plots/empirical_scatterplot_cdm_hr.pdf", width = 5, height = 5)
+
+# Print the plot to the PDF device
+print(plot_list$cdm_hr)
+
+dev.off()
+
+pdf("plots/empirical_scatterplot_mcmi_mokken.pdf", width = 5, height = 5)
+
+# Print the plot to the PDF device
+print(plot_list$mcmi_mokken)
+
+dev.off()
+
+pdf("plots/empirical_scatterplot_cdm_ecpe.pdf", width = 5, height = 5)
+
+# Print the plot to the PDF device
+print(plot_list$cdm_ecpe)
+
+# Close the PDF device
+dev.off()
+```
+```{r}
+for (obj_name in names(q_data)) {
+    if (!substring(obj_name, 1, 9) %in% c("cdm_timss", "cdm_pisa0", "hmcdm_spa")) {
+      print(obj_name)
+      
+      # Convert the object to a data frame
+      df.tmp <- q_data[[obj_name]]$to_data_frame()
+      
+      df.cdm.structure <- func.convert.Q.data.structure.with.held.out(df.tmp, 0)
+      
+      print(length(df.cdm.structure$Q))
+      print(length(df.cdm.structure$dat))
+    }
+  }
+```
+
+```{r}
+
+```
+
+
 
