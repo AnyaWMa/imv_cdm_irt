@@ -57,19 +57,19 @@ cdm.sim<-function(a,N=1000,sk.offset=0,nsk=6) {
     #list(t=true,om=om)
     om
 }
-a<-sort(runif(50,min=0,max=3))
+a<-sort(runif(500,min=0,max=3))
 library(parallel)
-out1<-mclapply(a,cdm.sim,mc.cores=10)
+#out1<-mclapply(a,cdm.sim,mc.cores=10)
 out2<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5)
-out<-list(out1=out1,out2=out2)
-save(out,file="scenario1.Rdata")
+#out<-list(out1=out1,out2=out2)
+##save.image(file="scenario1.Rdata")
 
 
 
-#pdf("/home/bdomingu/Dropbox/Apps/Overleaf/CDM_predictions/scenario1.pdf",width=6,height=3)
+pdf("/home/bdomingu/Dropbox/Apps/Overleaf/CDM_predictions/scenario1.pdf",width=6,height=3)
 par(mgp=c(2,1,0),mfrow=c(1,2),mar=c(3,3,1,1),oma=rep(.5,4))
 ####
-plot(NULL,xlim=c(0,3),ylim=c(0,.5),xlab='a',ylab='rmse(oos resp,est)')
+plot(NULL,xlim=c(0,3),ylim=c(0,.6),xlab='a',ylab='RMSE(oos resp,est)')
 pf<-function(x,y,...) {
     m<-loess(y~x)
     lines(x,predict(m),...,lwd=2)
@@ -85,23 +85,27 @@ f<-function(out,...) {
     pf(a,irt.p,col='blue',...,lty=2)
     pf(a,cdm.p,col='red',...,lty=2)
 }
-#f(out1,lty=1)
+#f(out1)
 f(out2)
-legend("bottomright",bty='n',fill=c("black","red"),c("irt","cdm"),title="est")
+legend("topright",bty='n',lty=c(1,1,2,2),col=c("blue","red","blue","red"),cex=.7,
+       c("(resp,IRT)","(resp,CDM)","(True,IRT)","(True,CDM)"))
 #####
 plot(NULL,xlim=c(0,3),ylab="IMV",xlab='a',ylim=c(0,.15))
 f<-function(out,...) {
     om<-do.call("rbind",out)
     abline(h=0)
     pf(a,om[,1],...)
-    pf(a,om[,2],col='blue',...)
-    pf(a,om[,3],col='red',...)
+    pf(a,om[,2],col='blue',...,lty=2)
+    pf(a,om[,3],col='red',...,lty=2)
 }
 #f(out1,lty=1)
 f(out2)
-legend("topright",bty='n',lwd=1,lty=c(1,2),title=expression(delta),legend=c(0,1.5))
+legend("topright",bty='n',lty=c(1,2,2),col=c("black","blue","red"),cex=.7,
+       c("(IRT,CDM)","(IRT,True)","(CDM,True)")
+       )
+#legend("topright",bty='n',lwd=1,lty=c(1,2),title=expression(delta),legend=c(0,1.5))
 ##
-#dev.off()
+dev.off()
 
 
 
