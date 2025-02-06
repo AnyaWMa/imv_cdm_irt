@@ -209,6 +209,7 @@ func.convert.Q.data.structure.with.k.fold <- function(df, kfold){
 
 ```{r}
 func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", if_oos = TRUE, kfold = 5, cdm_pr_estimate = cdm.pr.marg){
+  print(cdm_model)
   n_items = n_distinct(df$item)
   item_list <- sort(unique(df$item))
   
@@ -223,6 +224,7 @@ func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", i
       dplyr ::arrange(id) 
     
     df.dat.no.id <- df.dat %>% dplyr :: select(-id)
+    print(cdm_model)
     
     predict.matrix <- cdm_pr_estimate(df.dat.no.id, qm, model = cdm_model)
     
@@ -262,6 +264,8 @@ func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", i
       
     imv <- imv::imv.binary(df.compare$resp, df.compare$prediction.irt, df.compare$prediction.cdm)
     
+    print(imv)
+    
     cor <- cor(df.compare$prediction.irt, df.compare$prediction.cdm)
       
     list.imv <- c(list.imv, imv) 
@@ -284,6 +288,8 @@ func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", i
       
       imv <- imv::imv.binary(df.compare$resp, df.compare$prediction.irt, df.compare$prediction.cdm)
       
+      print(imv)
+      
       cor <- cor(df.compare$prediction.irt, df.compare$prediction.cdm)
       
       list.imv <- c(list.imv, imv) 
@@ -292,13 +298,8 @@ func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", i
     }
   }
   
-  imv_reuslt <- list()
-  imv_reuslt[['imv_mean']] <- mean(unlist(list.imv))
-  imv_reuslt[['imv_sd']] <- sd(unlist(list.imv))
-  imv_reuslt[['cor_mean']] <- mean(unlist(list.cor))
-  imv_reuslt[['cor_sd']] <- sd(unlist(list.cor))
-  
-  return(imv_reuslt)
+  return(c(mean(unlist(list.imv)),  sd(unlist(list.imv)), mean(unlist(list.cor)), sd(unlist(list.cor))))
+ 
 }
 ```
 
@@ -310,22 +311,22 @@ func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", i
 ### Q1: check if q_matrix is correct?
 
 ```{r}
-frac20_irw <- q_data$frac20$to_data_frame() 
+df <- q_data$cdm_timss11$to_data_frame() 
 
-item_list <- sort(unique(frac20_irw $item))
+if ("rt" %in% colnames(df)) {
+        df <- df[, !colnames(df) %in% "rt"]
+}
 
-df.cdm.structure <- func.convert.Q.data.structure.with.held.out(frac20_irw, 0.2)
+if ("booklet" %in% colnames(df)) {
+        df <- df[, !colnames(df) %in% "booklet"]
+        }
 ```
+
 
 ```{r}
-hi <- func.run.analysis.debug(frac20_irw, "DINA", TRUE, cdm_pr_estimate = cdm.pr.marg)
+hi <- func.run.analysis.kfold(df, "DINA", "2PL", FALSE, 5, cdm.pr.marg)
 ```
-```{r}
-hi <- func.run.analysis.kfold(frac20_irw, "DINA", "2PL", TRUE, 5, cdm.pr.marg)
-```
-```{r}
-func.run.analysis.kfold(frac20_irw, "DINA", "2PL", FALSE, 5, cdm.pr.marg)
-```
+
 ### Q2: check if frac20 cdm prediction makes sense?
 
 ```{r}
@@ -365,30 +366,6 @@ hi <- result.compared %>%
 imv::imv.binary(hi$resp, hi$prediction.irt, hi$prediction.cdm)
 ```
 
-### Q3: check if any item?
-```{r}
-# df.item.check <- result.compared %>% 
-#     mutate(prediction.cdm.binary = ifelse(runif(n()) < prediction.cdm, 1, 0),  # Roll dice based on prediction.cdm probability
-#          prediction.irt.binary = ifelse(runif(n()) < prediction.irt, 1, 0)   # Roll dice based on prediction.irt probability
-#          ) %>% 
-#   mutate(cdm.correct = ifelse(resp == prediction.cdm.binary, 1, 0), 
-#          irt.correct = ifelse(resp == prediction.irt.binary, 1, 0)) %>% 
-#   group_by(item, held_out) %>% 
-#   dplyr :: summarise(p.cdm.correct = mean(cdm.correct), p.irt.correct = mean(irt.correct)) %>% 
-#   arrange(p.cdm.correct)
-# 
-# ggplot(df.item.check %>% mutate(held_out = as.character(held_out)),
-#        mapping = aes(x = p.cdm.correct, 
-#                      y = p.irt.correct, 
-#                      color = held_out)) +
-#   # Connect points with the same 'item'
-#   geom_line(aes(group = item), color = "gray") +  # Lines for same 'item'
-#   geom_text(aes(label = item)) +  # Text labels for items
-#   scale_color_manual(values = c("black", "darkred")) + 
-#   xlim(0.3, 1) + ylim(0.3, 1) + 
-#   coord_equal() +
-#   theme_minimal() + stat_cor()
-```
 
 ## Run all data
 
@@ -397,6 +374,7 @@ func.run.empirical.data <- function(cdm_model = "DINA", irt_model = "2PL", cdm_p
   # Initialize empty lists to store results
   all_results <- list()
   oos_results <- list()
+  name_results <- c()
   
   # Iterate over objects in q_data (adjust the loop as needed for your actual structure)
   for (obj_name in names(q_data)) {
@@ -415,68 +393,206 @@ func.run.empirical.data <- function(cdm_model = "DINA", irt_model = "2PL", cdm_p
         df <- df[, !colnames(df) %in% "rt"]
       }
       
+      if ("booklet" %in% colnames(df)) {
+        df <- df[, !colnames(df) %in% "booklet"]
+      }
+      
       # Run the first type of analysis once
-      result <- func.run.analysis.kfold(df, cdm_model, irt_model, FALSE, 5, cdm.pr.marg)
-      object_1_results[[i]] <- result
+      object_1_results <- func.run.analysis.kfold(df, cdm_model, irt_model, FALSE, 5, cdm.pr.marg)
       
       # Run the second type of analysis multiple times
-      result <- func.run.analysis.kfold(df, cdm_model, irt_model, TRUE, 5, cdm.pr.marg)
-      object_2_results[[i]] <- result
+      object_2_results <- func.run.analysis.kfold(df, cdm_model, irt_model, TRUE, 5, cdm.pr.marg)
     
-      
       # Combine results for this object and store them in lists
-      all_results[[obj_name]] <- do.call(rbind, object_1_results)
-      oos_results[[obj_name]] <- do.call(rbind, object_2_results)
+      all_results<- rbind(all_results, object_1_results)
+      oos_results <- rbind(oos_results, object_2_results)
+      name_results <- c(name_results, obj_name)
+      
     }
   }
   
-  # Combine all results into a single data frame
-  final_all_results <- do.call(rbind, lapply(names(all_results), function(name) {
-    cbind(object = name, all_results[[name]])
-  }))
+  colnames(all_results) <- c("mean_imv",  "sd_imv", "mean_cor", "sd_cor")
+  colnames(oos_results) <- c("mean_imv",  "sd_imv", "mean_cor", "sd_cor")
   
-  final_oos_results <- do.call(rbind, lapply(names(oos_results), function(name) {
-    cbind(object = name, oos_results[[name]])
-  }))
+  df.imv.result <- as.data.frame(all_results) %>% 
+    add_column(dataname = name_results) %>% 
+    mutate(sample_method = "all") %>% 
+    rbind(as.data.frame(oos_results) %>% 
+    add_column(dataname = name_results) %>% 
+    mutate(sample_method = "kfold")) %>% 
+    mutate(mean_imv = as.numeric(mean_imv), 
+         sd_imv = as.numeric(sd_imv), 
+         mean_cor = as.numeric(mean_cor), 
+         sd_cor = as.numeric(sd_cor))
   
-  df.imv.result <- as.data.frame(final_all_results) %>% 
-  dplyr :: select(object, imv_mean, cor_mean) %>% 
-  set_names("dataname", "imv_all_response", "cor_all_response") %>% 
-  mutate(dataname = as.character(dataname),
-    imv_all_response = as.numeric(imv_all_response), 
-         cor_all_response = as.numeric(cor_all_response)) %>% 
-  left_join(as.data.frame(final_oos_results) %>% 
-              set_names("dataname", "imv_kfold_response", "imv_kfold_response_sd", "cor_kfold_response", "cor_kfold_response_sd") %>% 
-  mutate(dataname = as.character(dataname),
-    imv_kfold_response = as.numeric(imv_kfold_response), 
-         imv_kfold_response_sd = as.numeric(imv_kfold_response_sd), 
-         cor_kfold_response = as.numeric(cor_kfold_response), 
-         cor_kfold_response_sd = as.numeric(cor_kfold_response_sd)))
-  
+  rownames(df.imv.result) <- NULL
+    
   # Return the comparison data frame
   return(df.imv.result)
 }
 ```
 
-## 2PL 
+
+```{r}
+func.run.empirical.data.timss <- function(cdm_model = "DINA", irt_model = "2PL", cdm_pr_estimate = cdm.pr) {
+  # Initialize empty lists to store results
+  all_results <- list()
+  oos_results <- list()
+  name_results <- c()
+  
+  # Iterate over objects in q_data (adjust the loop as needed for your actual structure)
+  for (obj_name in names(q_data)) {
+    if (substring(obj_name, 1, 11) == "cdm_timss07") {
+      print(obj_name)
+      
+      # Convert the object to a data frame
+      df <- q_data[[obj_name]]$to_data_frame()
+      
+      # Initialize lists to store results for this object
+      object_1_results <- list()
+      object_2_results <- list()
+      
+      # Remove "rt" column if it exists
+      if ("rt" %in% colnames(df)) {
+        df <- df[, !colnames(df) %in% "rt"]
+      }
+      
+      if ("booklet" %in% colnames(df)) {
+        df <- df[, !colnames(df) %in% "booklet"]
+      }
+      
+      # Run the first type of analysis once
+      object_1_results <- func.run.analysis.kfold(df, cdm_model, irt_model, FALSE, 5, cdm.pr.marg)
+      
+      # Run the second type of analysis multiple times
+      object_2_results <- func.run.analysis.kfold(df, cdm_model, irt_model, TRUE, 5, cdm.pr.marg)
+    
+      # Combine results for this object and store them in lists
+      all_results<- rbind(all_results, object_1_results)
+      oos_results <- rbind(oos_results, object_2_results)
+      name_results <- c(name_results, obj_name)
+      
+    }
+  }
+  
+  colnames(all_results) <- c("mean_imv",  "sd_imv", "mean_cor", "sd_cor")
+  colnames(oos_results) <- c("mean_imv",  "sd_imv", "mean_cor", "sd_cor")
+  
+  df.imv.result <- as.data.frame(all_results) %>% 
+    add_column(dataname = name_results) %>% 
+    mutate(sample_method = "all") %>% 
+    rbind(as.data.frame(oos_results) %>% 
+    add_column(dataname = name_results) %>% 
+    mutate(sample_method = "kfold")) %>% 
+    mutate(mean_imv = as.numeric(mean_imv), 
+         sd_imv = as.numeric(sd_imv), 
+         mean_cor = as.numeric(mean_cor), 
+         sd_cor = as.numeric(sd_cor))
+  
+  rownames(df.imv.result) <- NULL
+    
+  # Return the comparison data frame
+  return(df.imv.result)
+}
+```
+
+
+## 2PL Non-timss
 ```{r}
 set.seed(10)
 
 df.imv.compare.1 <- func.run.empirical.data(cdm_model = "DINA", irt_model = "2PL")
 
+
 df.imv.compare.2 <- func.run.empirical.data(cdm_model = "DINO", irt_model = "2PL")
 
 df.imv.compare.3 <- func.run.empirical.data(cdm_model = "GDINA", irt_model = "2PL")
-```
 
+```
 ```{r}
 df.imv.compare.result <- df.imv.compare.1 %>% 
   mutate(cdm_model = "DINA") %>% 
   rbind(df.imv.compare.2 %>% mutate(cdm_model = "DINO")) %>% 
   rbind(df.imv.compare.3 %>% mutate(cdm_model = "GDINA")) %>% 
   relocate(dataname, cdm_model) %>% 
+  pivot_wider(names_from = "sample_method", values_from = c("mean_imv",  "sd_imv", "mean_cor", "sd_cor")) %>% 
   arrange(dataname) %>% 
-  dplyr :: select(dataname, cdm_model, "imv_all_response", "imv_kfold_response", "imv_kfold_response_sd")
+  dplyr:: select(dataname, cdm_model, "mean_imv_all", "mean_imv_kfold", "sd_imv_kfold")
+ 
+```
+
+
+booklet 
+## 2PL timss
+```{r}
+q_data$cdm_timss11$to_data_frame() %>% 
+  group_by(item, id) %>% 
+  tally() %>% 
+  arrange(-n)
+```
+
+
+```{r}
+set.seed(10)
+
+df.imv.compare.1.timss <- func.run.empirical.data.timss(cdm_model = "GDINA", irt_model = "2PL")
+
+df.imv.compare.2.timss <- func.run.empirical.data.timss(cdm_model = "DINO", irt_model = "2PL")
+
+df.imv.compare.3.timss <- func.run.empirical.data.timss(cdm_model = "GDINA", irt_model = "2PL")
+
+df.imv.compare.result.timss <- df.imv.compare.1.timss %>% 
+  mutate(cdm_model = "DINA") %>% 
+  rbind(df.imv.compare.2.timss %>% mutate(cdm_model = "DINO")) %>% 
+  rbind(df.imv.compare.3.timss %>% mutate(cdm_model = "GDINA")) %>% 
+  relocate(dataname, cdm_model) %>% 
+  pivot_wider(names_from = "sample_method", values_from = c("mean_imv",  "sd_imv", "mean_cor", "sd_cor")) %>% 
+  arrange(dataname) %>% 
+  dplyr:: select(dataname, cdm_model, "mean_imv_all", "mean_imv_kfold", "sd_imv_kfold")
+
+```
+
+## Check properties of ED
+```{r}
+obj_names <- c()
+n_p <- c()
+n_i <- c()
+n_p_i <- c()
+n_q <- c()
+for (obj_name in names(q_data)) {
+  df <- q_data[[obj_name]]$to_data_frame()
+  
+  # Remove "rt" column if it exists
+      if ("rt" %in% colnames(df)) {
+        df <- df[, !colnames(df) %in% "rt"]
+      }
+      
+      if ("booklet" %in% colnames(df)) {
+        df <- df[, !colnames(df) %in% "booklet"]
+      }
+  
+  n_q <- c(n_q, (length(colnames(df)) - 3))
+  obj_names <- c(obj_names, obj_name)
+  n_p <- c(n_p,length(unique(df$id)) )
+  n_i <- c(n_i,length(unique(df$item)))
+  hi <- df %>% 
+    group_by(id) %>% 
+    tally()
+  n_p_i <- c(n_p_i,mean(hi$n))
+  
+}
+```
+```{r}
+empirical_data_descp <- tibble(datanames = obj_names, n_participants = n_p, n_items = n_i, n_attributes = n_q) %>% 
+  arrange(n_attributes) %>% 
+  filter(!datanames %in% c("hmcdm_spatialreasoning", "cdm_pisa00R"))
+```
+```{r}
+table_latex <- kable(empirical_data_descp, format = "latex", caption = "IRW empirical datasets descriptions") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+# Print LaTeX Code
+cat(table_latex)
 ```
 
 
