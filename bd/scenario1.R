@@ -45,10 +45,6 @@ cdm.sim<-function(a,N=1000,sk.offset=0,nsk=6,bound=NULL) {
 }
 a<-sort(runif(100,min=0,max=3))
 library(parallel)
-#out1<-mclapply(a,cdm.sim,mc.cores=10)
-#out2<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5)
-#out<-list(out1=out1,out2=out2)
-##save.image(file="scenario1.Rdata")
 
 out2<-list()
 for (i in c(.1,.2,.3)) out2[[as.character(i)]]<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5,bound=i)
@@ -88,12 +84,10 @@ for (i in 1:length(out2)) {
         pf(a,om[,2],col='blue',...,lty=2)
         pf(a,om[,3],col='red',...,lty=2)
     }
-                                        #f(out1,lty=1)
     f(out2[[i]])
     legend("topright",bty='n',lty=c(1,2,2),col=c("black","blue","red"),cex=.7,
            c("(IRT,CDM)","(IRT,True)","(CDM,True)")
            )
 }
-                                        #legend("topright",bty='n',lwd=1,lty=c(1,2),title=expression(delta),legend=c(0,1.5))
-    ##
-                                        #dev.off()
+##legend("topright",bty='n',lwd=1,lty=c(1,2),title=expression(delta),legend=c(0,1.5))
+##dev.off()
