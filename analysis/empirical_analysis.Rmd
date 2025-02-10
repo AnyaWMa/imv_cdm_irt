@@ -36,6 +36,12 @@ library(imv)
 ```{r}
 source("bd/00funs.R")
 ```
+```{r}
+timss2011 <- readRDS("data/TIMSS2011data.rds")
+```
+```{r}
+timss2011
+```
 
 ```{r echo = FALSE}
 # sets how code looks in knitted document
@@ -48,7 +54,7 @@ options(dplyr.summarise.inform = F)
 # Load IRW
 ```{r}
 #reliability 
-dataset <- redivis::user("datapages")$dataset("item_response_warehouse",version='v7.0')
+dataset <- redivis::user("datapages")$dataset("item_response_warehouse",version='v10.0')
 
 dataset_tables <- dataset$list_tables()
 ```
@@ -137,6 +143,8 @@ func.convert.Q.data.structure.with.k.fold <- function(df, kfold){
      dplyr ::arrange(item) %>% 
      dplyr ::select(-c(item))
   
+  Q <- Q[, colSums(Q != 0) > 0]
+  
   Q <- Q[, order(colnames(Q))]
   
   assignments <- sample(rep(1:kfold, length.out = length(df$id)))
@@ -209,13 +217,14 @@ func.convert.Q.data.structure.with.k.fold <- function(df, kfold){
 
 ```{r}
 func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", if_oos = TRUE, kfold = 5, cdm_pr_estimate = cdm.pr.marg){
-  print(cdm_model)
+  
   n_items = n_distinct(df$item)
   item_list <- sort(unique(df$item))
   
   df.cdm.structure <- func.convert.Q.data.structure.with.k.fold(df, kfold = kfold)
   
   func.get.prediction.result <- function(df.tmp, dat, qm){
+   
     # CDM model
     df.dat <- dat %>% 
       dplyr ::select(-gr) %>% 
@@ -224,10 +233,9 @@ func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", i
       dplyr ::arrange(id) 
     
     df.dat.no.id <- df.dat %>% dplyr :: select(-id)
-    print(cdm_model)
     
     predict.matrix <- cdm_pr_estimate(df.dat.no.id, qm, model = cdm_model)
-    
+  
     result <- as.data.frame(predict.matrix) %>% 
       set_names(item_list) %>% 
       mutate(id = row_number()) %>% 
@@ -236,7 +244,7 @@ func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", i
     
     # IRT model
     mod.irt <- mirt(df.dat.no.id, 1, itemtype = irt_model)
-    
+   
     thetas <- as.data.frame(fscores(mod.irt))
 
     params <- data.frame(coef(mod.irt, IRTpars = TRUE, simplify = TRUE))
@@ -310,9 +318,10 @@ func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", i
 
 ### Q1: check if q_matrix is correct?
 
-```{r}
-df <- q_data$cdm_timss11$to_data_frame() 
 
+```{r}
+df <- q_data$cdm_timss03$to_data_frame() 
+#df <- q_data$frac20$to_data_frame() 
 if ("rt" %in% colnames(df)) {
         df <- df[, !colnames(df) %in% "rt"]
 }
@@ -320,6 +329,34 @@ if ("rt" %in% colnames(df)) {
 if ("booklet" %in% colnames(df)) {
         df <- df[, !colnames(df) %in% "booklet"]
         }
+```
+
+
+```{r}
+timss07 <- data(data.timss07.G4.lee, package="CDM")
+```
+```{r}
+data(data.timss07.G4.lee, package="CDM")
+dat <- data.timss07.G4.lee$data
+q.matrix <- data.timss07.G4.lee$q.matrix
+# extract items
+items <- grep( "M0", colnames(dat), value=TRUE )
+#*** Model 1: estimate DINA model
+mod1 <- CDM::din( dat[,items], q.matrix )
+summary(mod1)
+
+```
+```{r}
+data(data.timss03.G8.su, package="CDM")
+data <- data.timss03.G8.su$data[,-c(1,2)]
+q.matrix <- data.timss03.G8.su$q.matrix
+```
+```{r}
+mod1 <- CDM::din(data, q.matrix )
+```
+
+```{r}
+summary(mod1)
 ```
 
 
