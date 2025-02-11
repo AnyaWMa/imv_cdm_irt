@@ -1,0 +1,88 @@
+---
+title: "Simulation analysis"
+author: "Wanjing Anya Ma"
+date:  "`r Sys.Date()`"
+output:
+  bookdown::html_document2:
+    toc: true
+    toc_depth: 4
+    theme: cosmo
+    highlight: tango
+    
+---
+
+# Data Preprocessing
+## Load Packages
+Let's first load the packages that we need for this chapter. 
+
+```{r, message=FALSE, warning = FALSE, echo = FALSE}
+library("knitr") # for rendering the RMarkdown file
+library("tidyverse") # for data wrangling 
+library(dplyr)
+library(mirt)
+library('ggpubr')
+library(Metrics)
+library(hash)
+library(ggplot2)
+library(GGally)
+library(gridExtra)
+library(rstudioapi)
+library(TAM)
+library(mgcv)
+library(GDINA)
+library(MASS)
+library(imv)
+```
+
+## Load data
+
+
+```{r}
+load("simulation_data/out_gdina_offset15.RData")
+load("simulation_data/out_gdina_offset05.RData")
+load("simulation_data/out_dina_offset15.RData")
+load("simulation_data/out_dina_offset05.RData")
+load("simulation_data/out_dino_offset15.RData")
+load("simulation_data/out_dino_offset05.RData")
+
+```
+```{r}
+out_dina_offset05$
+```
+
+```{r}
+get_clean_df <- function(df, model, offset){
+ 
+  df_result  <- tibble(a = numeric(), name = character(), value = numeric(), metric = character(), offset = character(), model = character(), bound = numeric())
+  for (bound in c(0.1, 0.2, 0.3)) {
+    col_name <- as.character(bound)
+    df_long <- map_df(df[[col_name]], ~as.list(.)) %>% 
+      mutate(a = df$a) %>%
+      set_names(c("(IRT,CDM)","(IRT,True)","(CDM,True)","(resp,IRT)","(resp,CDM)","(True,IRT)","(True,CDM)","a")) %>% 
+  pivot_longer(cols = -a) %>% 
+  mutate(metric = ifelse(name %in%  c("(IRT,CDM)","(IRT,True)","(CDM,True)"), "imv", "rmse")) %>% add_column(offset = offset, model = model, bound = bound)
+    df_result <- df_result %>% rbind(df_long)
+
+  }
+  return (df_result)
+}
+
+```
+```{r}
+df_combined <- bind_rows(
+  get_clean_df(out_gdina_offset15, "GDINA", "1.5"),
+  get_clean_df(out_gdina_offset05, "GDINA", "0.5"),
+  get_clean_df(out_dina_offset15, "DINA", "1.5"),
+  get_clean_df(out_dina_offset05, "DINA", "0.5"),
+  get_clean_df(out_dino_offset15, "DINO", "1.5"),
+  get_clean_df(out_dino_offset05, "DINO", "0.5")
+)
+```
+
+
+```{r}
+ggplot(df_combined %>% filter(metric == "imv"), mapping = aes(x = a,
+                     y = value, color = name, linetype = offset))  + geom_smooth() +facet_grid(bound ~ model)
+```
+
+

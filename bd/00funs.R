@@ -62,7 +62,7 @@ oos.compare<-function(resp,qm,nfolds=5,modeltype) {
 }
 
 
-oos.compare.newresp<-function(resp,qm,truep) {
+oos.compare.newresp<-function(resp,qm,truep, modeltype = "DINA") {
     id<-1:nrow(resp)
     item<-names(resp)
     L<-list()
@@ -73,7 +73,7 @@ oos.compare.newresp<-function(resp,qm,truep) {
     id<-x$id
     x<-x[,names(resp)]
     ##
-    p.cdm<-cdm.pr.marg(x,qm)
+    p.cdm<-cdm.pr.marg(x,qm, modeltype)
     L<-list()
     for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],p.cdm=p.cdm[,i])
     p<-do.call("rbind",L)
