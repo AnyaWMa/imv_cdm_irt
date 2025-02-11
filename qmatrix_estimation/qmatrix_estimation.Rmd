@@ -45,13 +45,27 @@ options(dplyr.summarise.inform = F)
 # Load IRW
 ```{r}
 #reliability 
-dataset <- redivis::user("datapages")$dataset("item_response_warehouse",version='v2.0')
+dataset <- redivis::user("datapages")$dataset("item_response_warehouse",version='v8.0')
 
 dataset_tables <- dataset$list_tables()
 ```
 
 ```{r}
-df <- dataset$table("content_literacy_intervention")$to_data_frame()
+df <- dataset$table("frac20")$to_data_frame()
+```
+```{r}
+ Q <- df %>% 
+     dplyr ::select(-c(id, resp)) %>% 
+    unique() %>% 
+     dplyr ::arrange(item) %>% 
+     dplyr ::select(-c(item))
+  
+  Q <- Q[, colSums(Q != 0) > 0]
+  
+  Q <- Q[, order(colnames(Q))]
+```
+```{r}
+Q
 ```
 
 ```{r}
@@ -59,7 +73,8 @@ ntimes<-2
 ```
 ```{r}
 x0 <- df %>% 
-  arrange(item)
+  mutate(item = as.integer(substring(item, 6))) %>% 
+  arrange(item) 
 resp0<-data.frame(irw::long2resp(x0))
 id<-resp0$id
 resp0$id<-NULL
@@ -93,7 +108,7 @@ rss<-compute_rss_fun(R,JJ)
 
 # q_matrix identification 
 ```{r}
-K<-2    
+K<-8   
 R0<- resp0
  R<-del.zeros(R0)  
  print(nrow(R))
@@ -112,16 +127,31 @@ R0<- resp0
 q.matrix = matrix(0, nrow = 20, ncol = 2)
 ```
 
-
-
 ```{r}
 R.W
 ```
 ```{r}
 R.W_converted <- ifelse(R.W > 1, 1, 0)
 ```
+```{r}
+as.matrix(Q)
+```
+```{r}
+R.W
+```
+
+```{r}
+Q.d<-discreQ_fun(as.matrix(Q),R.W)  
+```
 
 ```{r}
 R.W_converted
+```
+```{r}
+Q
+```
+
+```{r}
+Q.d
 ```
 
