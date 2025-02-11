@@ -275,7 +275,7 @@ all(df_frac20_cdm_structure$Q == df_frac20_cdm_structure_gdina$Q)
 ### Q2: check if frac20 cdm prediction makes sense?
 
 ```{r}
-df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "GDINA", "2PL", FALSE, 5, cdm.pr.marg)
+df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "DINO", "2PL", FALSE, 5, cdm.pr.marg)
 ```
 ```{r}
 df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "GDINA", "2PL", TRUE, 5, cdm.pr.marg)
@@ -437,6 +437,10 @@ df.imv.compare.result <- df.imv.compare.1 %>%
  
 ```
 
+
+```{r}
+write_csv(df.imv.compare.result, "analysis/e_analysis_summary.csv")
+```
 ```{r}
 df.imv.compare.result
 ```

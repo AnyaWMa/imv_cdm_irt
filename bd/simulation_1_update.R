@@ -55,13 +55,13 @@ out_gdina_offset15 <-list()
 a<-sort(runif(100,min=0,max=3))
 for (i in c(.1,.2,.3)) out_gdina_offset15[[as.character(i)]]<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5,bound=i, modeltype = "GDINA")
 out_gdina_offset15[["a"]] <- a
-save(out_gdina_offset15 , file = "../simulation_data/out_gdina_offset15.RData")
+#save(out_gdina_offset15 , file = "../simulation_data/out_gdina_offset15.RData")
 
 out_gdina_offset05 <-list()
 a<-sort(runif(100,min=0,max=3))
 for (i in c(.1,.2,.3)) out_gdina_offset05[[as.character(i)]]<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=0.5,bound=i, modeltype = "GDINA")
 out_gdina_offset05[["a"]] <- a
-save(out_gdina_offset05 , file = "../simulation_data/out_gdina_offset05.RData")
+#save(out_gdina_offset05 , file = "../simulation_data/out_gdina_offset05.RData")
 
 #DINA
 out_dina_offset15 <-list()
@@ -74,7 +74,7 @@ out_dina_offset05 <-list()
 a<-sort(runif(100,min=0,max=3))
 for (i in c(.1,.2,.3)) out_dina_offset05[[as.character(i)]]<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=0.5,bound=i, modeltype = "DINA")
 out_dina_offset05[["a"]] <- a
-save(out_dina_offset05 , file = "../simulation_data/out_dina_offset05_save.RData")
+save(out_dina_offset05 , file = "../simulation_data/out_dina_offset05.RData")
 
 #DINO
 out_dino_offset15 <-list()

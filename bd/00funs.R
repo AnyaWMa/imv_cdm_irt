@@ -134,21 +134,26 @@ oos.compare.2q<-function(resp,qm1,qm2,nfolds=5) {
     mean(om)
 }
 
-cdm.pr.marg<-function(resp,qm,modeltype="DINA") { ##really only works with DINA
-    if (modeltype!="DINA") stop("must be DINA")
-    ##cdm pvalues
-    library(GDINA)
-    m <- GDINA(resp,qm,modeltype)
-    map <- personparm(m, what = "mp")[,1:ncol(qm)]
-    gs<-coef(m,what='gs')
-    p<-list()
-    for (i in 1:nrow(qm)) {
-        ii<-which(qm[i,]==1)
-        z<-map[,ii,drop=FALSE]
-        rm<-apply(z,1,prod)
-        p[[i]]<-(1-gs[i,2])*rm + (1-rm)*gs[i,1]
+cdm.pr.marg<-function(resp,qm,modeltype="DINA") {
+  ##cdm pvalues
+  library(GDINA)
+  m <- GDINA(resp,qm,modeltype)
+  map <- personparm(m, what = "mp")[,1:ncol(qm)]
+  gs<-coef(m,what='gs')
+  p<-list()
+  for (i in 1:nrow(qm)) {
+    ii<-which(qm[i,]==1)
+    z<-map[,ii,drop=FALSE]
+    rm<-apply(z,1,prod)
+    
+    if (modeltype == "DINO"){
+      rm_dino <- 1 - apply(1 - z, 1, prod)
+      p[[i]] <- (1 - gs[i,2]) * rm_dino + (1 - rm_dino) * gs[i,1]
+    } else {
+      p[[i]]<-(1-gs[i,2])*rm + (1-rm)*gs[i,1]
     }
-    p.cdm<-do.call("cbind",p)
+  }
+  p.cdm<-do.call("cbind",p)
 }
 
 cdm.pr.marg2<-function(resp,qm,modeltype="GDINA") { #really only works with GDINA

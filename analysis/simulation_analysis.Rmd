@@ -81,8 +81,18 @@ df_combined <- bind_rows(
 
 
 ```{r}
-ggplot(df_combined %>% filter(metric == "imv"), mapping = aes(x = a,
+ggplot(df_combined %>% filter(metric == "imv", model != "GDINA"), mapping = aes(x = a,
                      y = value, color = name, linetype = offset))  + geom_smooth() +facet_grid(bound ~ model)
+```
+```{r}
+ggplot(df_combined %>% filter(metric == "rmse"), mapping = aes(x = a,
+                     y = value, color = name, linetype = offset))  + geom_smooth() +facet_grid(bound ~ model)
+```
+
+
+```{r}
+ggplot(df_combined %>% filter(metric == "imv", model == "DINO"), mapping = aes(x = a,
+                     y = value, color = name, linetype = offset))  + geom_smooth() +facet_wrap(~bound)
 ```
 
 
