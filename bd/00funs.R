@@ -40,7 +40,7 @@ oos.compare<-function(resp,qm,nfolds=5,modeltype) {
     for (gr in unique(df$gr)) {
         oos<-df[df$gr==gr,]
         ins<-df[df$gr!=gr,]
-        x<-irw::long2resp(ins)
+        x<-irwpkg::irw_long2resp(ins)
         id<-x$id
         x<-x[,names(resp)]
         ##
@@ -69,7 +69,7 @@ oos.compare.newresp<-function(resp,qm,truep) {
     for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],resp=resp[,i],truep=truep[,i])
     df<-do.call("rbind",L)
     om<-numeric()
-    x<-irw::long2resp(df)
+    x<-irwpkg::irw_long2resp(df)
     id<-x$id
     x<-x[,names(resp)]
     ##
@@ -113,7 +113,7 @@ oos.compare.2q<-function(resp,qm1,qm2,nfolds=5) {
     for (gr in unique(df$gr)) {
         oos<-df[df$gr==gr,]
         ins<-df[df$gr!=gr,]
-        x<-irw::long2resp(ins)
+        x<-irwpkg::irw_long2resp(ins)
         id<-x$id
         x<-x[,names(resp)]
         ##
