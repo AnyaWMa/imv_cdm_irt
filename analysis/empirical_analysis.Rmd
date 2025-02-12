@@ -275,10 +275,10 @@ all(df_frac20_cdm_structure$Q == df_frac20_cdm_structure_gdina$Q)
 ### Q2: check if frac20 cdm prediction makes sense?
 
 ```{r}
-df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "DINO", "2PL", FALSE, 5, cdm.pr.marg)
+df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "DINA", "2PL", FALSE, 5, cdm.pr.marg)
 ```
 ```{r}
-df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "GDINA", "2PL", TRUE, 5, cdm.pr.marg)
+df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "DINA", "2PL", TRUE, 5, cdm.pr.marg)
 ```
 ```{r}
 df_frac20_analysis
@@ -469,6 +469,7 @@ timss2011_ready <- timss_data_with_id %>%
   
 ```
 
+
 ```{r}
 line <- c()
 for (model in c("DINA", "DINO", "GDINA")){
@@ -518,7 +519,7 @@ run.fraction.data.analysis(data.fraction2$data, data.fraction2$q.matrix3)
 run.fraction.data.analysis(data.fraction4$data, data.fraction4$q.matrix %>% dplyr :: select(-item))
 ```
 ```{r}
-data.fraction5
+data.fraction2$q.matrix2
 ```
 
 ## Check properties of ED

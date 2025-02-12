@@ -138,7 +138,7 @@ cdm.pr.marg<-function(resp,qm,modeltype="DINA") {
   ##cdm pvalues
   library(GDINA)
   m <- GDINA(resp,qm,modeltype)
-  map <- personparm(m, what = "mp")[,1:ncol(qm)]
+  map <- personparm(m, what = "MAP")[,1:ncol(qm)]
   gs<-coef(m,what='gs')
   p<-list()
   for (i in 1:nrow(qm)) {
