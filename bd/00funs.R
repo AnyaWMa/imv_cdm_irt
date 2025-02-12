@@ -179,3 +179,4 @@ cdm.pr.marg2<-function(resp,qm,modeltype="GDINA") { #really only works with GDIN
     }
     p.cdm<-do.call("cbind",p)
 }
+
