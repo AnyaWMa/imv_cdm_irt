@@ -152,7 +152,7 @@ cdm.pr.marg<-function(resp,qm,modeltype="DINA") { ##really only works with DINA
 }
 
 cdm.pr.marg2<-function(resp,qm,modeltype="GDINA") { #really only works with GDINA
-    if (modeltype!="GDINA") stop("must be GDINA")
+   # if (modeltype!="GDINA") stop("must be GDINA")
     ##
     library(GDINA)
     m <- GDINA(resp,qm,modeltype)
