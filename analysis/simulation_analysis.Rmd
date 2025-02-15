@@ -46,9 +46,8 @@ load("simulation_data/out_dino_offset15.RData")
 load("simulation_data/out_dino_offset05.RData")
 
 ```
-```{r}
-out_dina_offset05$
-```
+
+
 
 ```{r}
 get_clean_df <- function(df, model, offset){
@@ -75,14 +74,16 @@ df_combined <- bind_rows(
   get_clean_df(out_dina_offset15, "DINA", "1.5"),
   get_clean_df(out_dina_offset05, "DINA", "0.5"),
   get_clean_df(out_dino_offset15, "DINO", "1.5"),
-  get_clean_df(out_dino_offset05, "DINO", "0.5")
+  get_clean_df(out_dino_offset05, "DINO", "0.5"),
+  
 )
 ```
 
 
+
 ```{r}
-ggplot(df_combined %>% filter(metric == "imv", model == "DINO"), mapping = aes(x = a,
-                     y = value, color = name, linetype = offset))  + geom_smooth() +facet_grid(bound ~ model)
+ggplot(df_combined %>% filter(metric == "imv", model == "DINA", offset == 1.5), mapping = aes(x = a,
+                     y = value, color = name, linetype = offset))  + geom_smooth() +facet_wrap(~bound)
 ```
 ```{r}
 ggplot(df_combined %>% filter(metric == "rmse"), mapping = aes(x = a,
@@ -95,4 +96,24 @@ ggplot(df_combined %>% filter(metric == "imv", model == "DINA"), mapping = aes(x
                      y = value, color = name, linetype = offset))  + geom_smooth() +facet_wrap(~bound)
 ```
 
+
+```{r}
+frac20$dat
+```
+
+```{r}
+# Fit a 2-dimensional IRT model
+m <- mirt(frac20$dat, 2, itemtype = "2PL")
+
+# Extract factor scores (theta estimates)
+theta <- fscores(m, method = "EAP")
+
+# Extract item parameters
+co <- coef(m, IRTpars = TRUE, simplify = TRUE)$items
+theta
+```
+
+```{r}
+
+```
 

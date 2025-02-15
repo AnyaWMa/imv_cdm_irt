@@ -461,7 +461,7 @@ ggplot(df_long , aes(x = dataname, y = mean_imv, fill = method)) +
                 aes(ymin = mean_imv - sd, ymax = mean_imv + sd, x = dataname),
                 width = 0.5, 
                 position = position_dodge(width = 0.8)) +  # Align error bars with bars
-  labs(x = "Dataset", y = "IMV(2PL, CDM)", title = "Comparison of Overfit vs OOS") +
+  labs(x = "Dataset", y = "IMV(2PL, CDM)", title = "Comparision of in-sample data vs out-of-sample fold") +
   theme_minimal() +
   facet_grid(estimate_method ~ cdm_model , scales = "free") +
    theme(
