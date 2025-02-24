@@ -411,11 +411,9 @@ empirical_q_data <- append(q_data, q_data2)
 ```
 
 ```{r}
+set.seed(10)
 df.imv.compare.1.mp <- func.run.empirical.data(empirical_q_data, cdm_model = "DINA", irt_model = "2PL")
 df.imv.compare.2.mp <- func.run.empirical.data(empirical_q_data, cdm_model = "GDINA", irt_model = "2PL")
-```
-
-```{r}
 df.imv.compare.1.map <- func.run.empirical.data(empirical_q_data, cdm_model = "DINA", irt_model = "2PL", estmethod = "MAP")
 df.imv.compare.2.map <- func.run.empirical.data(empirical_q_data, cdm_model = "GDINA", irt_model = "2PL", estmethod = "MAP")
 ```
@@ -498,7 +496,32 @@ ggplot(df_long %>% filter(estimate_method == "mp"), aes(x = dataname, y = mean_i
   ) + scale_x_discrete(expand = expansion(mult = c(0.1, 0.1)))
 
 ```
+```{r}
+ggplot(df_long %>% filter(dataname == "frac20"), aes(x = dataname, y = mean_imv, fill = method)) +
+  geom_bar(stat = "identity", width = 0.5, position = position_dodge(width = 0.5)) +  # Adjust dodge width for alignment
+  geom_errorbar(data = df_error %>% filter(dataname == "frac20"), 
+                aes(ymin = mean_imv - sd, ymax = mean_imv + sd, x = dataname),
+                width = 0.25, 
+                position = position_dodge(width = 0.5)) +  # Align error bars with bars
+  labs(x = "Dataset", y = "IMV(2PL, CDM)", title = "Comparision of in-sample data vs out-of-sample fold") +
+  theme_minimal() +
+  facet_grid(estimate_method ~ cdm_model) +
+   theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom"  # Move legend to bottom
+  ) + ylim(-0.2, 0.05)
 
+ggplot(df_long %>% filter(dataname == "frac20", method != "mean_imv_kfold"), aes(x = dataname, y = mean_imv, fill = method)) +
+  geom_bar(stat = "identity", width = 0.25, position = position_dodge(width = 0.25)) +  # Adjust dodge width for alignment
+  
+  labs(x = "Dataset", y = "IMV(2PL, CDM)", title = "in-sample data prediction") +
+  theme_minimal() +
+  facet_grid(estimate_method ~ cdm_model) +
+   theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom"  # Move legend to bottom
+  ) + ylim(-0.05, 0.05)
+```
 
 ## Check properties of ED
 ```{r}
