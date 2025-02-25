@@ -113,9 +113,7 @@ func.convert.Q.data.structure.with.held.out <- function(df, heldout_rate){
   
   return (tables_list)
 }
-```
 
-```{r}
 func.convert.Q.data.structure.with.k.fold <- function(df, kfold){
   
   Q <- df %>% 
@@ -148,7 +146,7 @@ func.convert.Q.data.structure.with.k.fold <- function(df, kfold){
 
 ## OOS prediction
 ```{r}
-func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", if_oos = TRUE, kfold = 5, cdm_pr_estimate = cdm.pr.marg){
+func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", if_oos = TRUE, kfold = 5, cdm_pr_estimate = cdm.pr.marg.update, estmethod = "mp"){
   n_items = n_distinct(df$item)
   item_list <- sort(unique(df$item))
   
@@ -175,7 +173,7 @@ func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", i
     params <- data.frame(coef(mod.irt, IRTpars = TRUE, simplify = TRUE))
     
     # CDM model
-    predict.matrix <- cdm_pr_estimate(df.dat.no.id, qm, model = cdm_model)
+    predict.matrix <- cdm_pr_estimate(df.dat.no.id, qm, model = cdm_model, estmethod = estmethod)
     
     result <- as.data.frame(predict.matrix) %>% 
       set_names(item_list) %>% 
@@ -275,19 +273,17 @@ all(df_frac20_cdm_structure$Q == df_frac20_cdm_structure_gdina$Q)
 ### Q2: check if frac20 cdm prediction makes sense?
 
 ```{r}
-df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "GDINA", "2PL", FALSE, 5, cdm.pr.marg)
+df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "GDINA", "2PL", FALSE, 5, cdm.pr.marg.update, "mp")
 ```
 ```{r}
-df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "GDINA", "2PL", TRUE, 5, cdm.pr.marg)
+df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "DINA", "2PL", TRUE, 5, cdm.pr.marg)
 ```
-```{r}
-df_frac20_analysis
-```
+
 
 ## Run all data
 
 ```{r}
-func.run.empirical.data <- function(cdm_model = "DINA", irt_model = "2PL", cdm_pr_estimate = cdm.pr) {
+func.run.empirical.data <- function(q_data, cdm_model = "DINA", irt_model = "2PL", cdm_pr_estimate = cdm.pr.marg.update, estmethod = "mp") {
   # Initialize empty lists to store results
   all_results <- list()
   oos_results <- list()
@@ -299,7 +295,13 @@ func.run.empirical.data <- function(cdm_model = "DINA", irt_model = "2PL", cdm_p
       print(obj_name)
       
       # Convert the object to a data frame
-      df <- q_data[[obj_name]]$to_data_frame()
+      #df <- q_data[[obj_name]]$to_data_frame()
+      
+      if (is.data.frame(q_data[[obj_name]])) {
+  df <- q_data[[obj_name]]
+} else {
+  df <- q_data[[obj_name]]$to_data_frame()  # Assuming the object has this method
+}
       
       # Initialize lists to store results for this object
       object_1_results <- list()
@@ -315,10 +317,10 @@ func.run.empirical.data <- function(cdm_model = "DINA", irt_model = "2PL", cdm_p
       }
       
       # Run the first type of analysis once
-      object_1_results <- func.run.analysis.kfold(df, cdm_model, irt_model, FALSE, 5, cdm.pr.marg)
+      object_1_results <- func.run.analysis.kfold(df, cdm_model, irt_model, FALSE, 5, cdm_pr_estimate, estmethod)
       
       # Run the second type of analysis multiple times
-      object_2_results <- func.run.analysis.kfold(df, cdm_model, irt_model, TRUE, 5, cdm.pr.marg)
+      object_2_results <- func.run.analysis.kfold(df, cdm_model, irt_model, TRUE, 5, cdm_pr_estimate, estmethod)
     
       # Combine results for this object and store them in lists
       all_results<- rbind(all_results, object_1_results)
@@ -350,109 +352,25 @@ func.run.empirical.data <- function(cdm_model = "DINA", irt_model = "2PL", cdm_p
 ```
 
 
-```{r}
-func.run.empirical.data.timss <- function(cdm_model = "DINA", irt_model = "2PL", cdm_pr_estimate = cdm.pr) {
-  # Initialize empty lists to store results
-  all_results <- list()
-  oos_results <- list()
-  name_results <- c()
-  
-  # Iterate over objects in q_data (adjust the loop as needed for your actual structure)
-  for (obj_name in names(q_data)) {
-    if (substring(obj_name, 1, 11) == "cdm_timss07") {
-      print(obj_name)
-      
-      # Convert the object to a data frame
-      df <- q_data[[obj_name]]$to_data_frame()
-      
-      # Initialize lists to store results for this object
-      object_1_results <- list()
-      object_2_results <- list()
-      
-      # Remove "rt" column if it exists
-      if ("rt" %in% colnames(df)) {
-        df <- df[, !colnames(df) %in% "rt"]
-      }
-      
-      if ("booklet" %in% colnames(df)) {
-        df <- df[, !colnames(df) %in% "booklet"]
-      }
-      
-      # Run the first type of analysis once
-      object_1_results <- func.run.analysis.kfold(df, cdm_model, irt_model, FALSE, 5, cdm.pr.marg)
-      
-      # Run the second type of analysis multiple times
-      object_2_results <- func.run.analysis.kfold(df, cdm_model, irt_model, TRUE, 5, cdm.pr.marg)
-    
-      # Combine results for this object and store them in lists
-      all_results<- rbind(all_results, object_1_results)
-      oos_results <- rbind(oos_results, object_2_results)
-      name_results <- c(name_results, obj_name)
-      
-    }
-  }
-  
-  colnames(all_results) <- c("mean_imv",  "sd_imv", "mean_cor", "sd_cor")
-  colnames(oos_results) <- c("mean_imv",  "sd_imv", "mean_cor", "sd_cor")
-  
-  df.imv.result <- as.data.frame(all_results) %>% 
-    add_column(dataname = name_results) %>% 
-    mutate(sample_method = "all") %>% 
-    rbind(as.data.frame(oos_results) %>% 
-    add_column(dataname = name_results) %>% 
-    mutate(sample_method = "kfold")) %>% 
-    mutate(mean_imv = as.numeric(mean_imv), 
-         sd_imv = as.numeric(sd_imv), 
-         mean_cor = as.numeric(mean_cor), 
-         sd_cor = as.numeric(sd_cor))
-  
-  rownames(df.imv.result) <- NULL
-    
-  # Return the comparison data frame
-  return(df.imv.result)
-}
-```
-
-
-### 2PL Non-timss
+### irw-data
 ```{r}
 set.seed(10)
 
-df.imv.compare.1 <- func.run.empirical.data(cdm_model = "DINA", irt_model = "2PL")
-
-df.imv.compare.2 <- func.run.empirical.data(cdm_model = "DINO", irt_model = "2PL")
-
-df.imv.compare.3 <- func.run.empirical.data(cdm_model = "GDINA", irt_model = "2PL")
-
-```
-```{r}
-df.imv.compare.result <- df.imv.compare.1 %>% 
-  mutate(cdm_model = "DINA") %>% 
-  rbind(df.imv.compare.2 %>% mutate(cdm_model = "DINO")) %>% 
-  rbind(df.imv.compare.3 %>% mutate(cdm_model = "GDINA")) %>% 
-  relocate(dataname, cdm_model) %>% 
-  pivot_wider(names_from = "sample_method", values_from = c("mean_imv",  "sd_imv", "mean_cor", "sd_cor")) %>% 
-  arrange(dataname) %>% 
-  dplyr:: select(dataname, cdm_model, "mean_imv_all", "mean_imv_kfold", "sd_imv_kfold")
- 
 ```
 
-```{r}
-df.imv.compare.result
-```
 
-### 2PL timss
+
+### non-irw data
+timss data 
 ```{r}
 timss2011 <- readRDS("data/TIMSS2011data.rds")
-```
-```{r}
+
 timss_data <-timss2011$data 
 
 item_names <- colnames(timss_data)
 
 timss_data_with_id <- rownames_to_column(timss_data, var = "id")
 
-  
 timss_q <- timss2011$Qc
 
 timss_q_clean <- timss_q[-12, ][,-1][,-1]
@@ -466,20 +384,7 @@ timss2011_ready <- timss_data_with_id %>%
 ```
 
 ```{r}
-line <- c()
-for (model in c("DINA", "DINO", "GDINA")){
-  line <- c(line, func.run.analysis.kfold(timss2011_ready, model, "2PL", FALSE, 5, cdm.pr.marg))
-  line <- c(line, func.run.analysis.kfold(timss2011_ready, model, "2PL", TRUE, 5, cdm.pr.marg))
-  
-}
-
-```
-```{r}
-line
-```
-### frac data more things
-```{r}
-run.fraction.data.analysis <- function(dat, Q) {
+convert.fraction.data <- function(dat, Q) {
   
   item_names <- colnames(dat)
   
@@ -489,32 +394,133 @@ run.fraction.data.analysis <- function(dat, Q) {
     pivot_longer(cols = -id, names_to = "item", values_to = "resp") %>%
     left_join(as.data.frame(Q) %>% 
                 add_column(item = item_names)) 
-  hi <- NULL
-  for (model in c("DINA", "DINO", "GDINA")){
-    hi <- hi %>% rbind(func.run.analysis.kfold(dat_ready, model, "2PL", FALSE, 5, cdm.pr.marg) %>% rbind(func.run.analysis.kfold(dat_ready, model, "2PL", TRUE, 5, cdm.pr.marg)))
-    
-  }
-  return (hi)
+  return (dat_ready)
 }
+```
+
+```{r}
+q_data2 <- list(
+  timss_2011 = timss2011_ready, 
+  frac15q5 = convert.fraction.data(data.fraction1$data, data.fraction1$q.matrix),
+  frac11q3 = convert.fraction.data(data.fraction2$data, data.fraction2$q.matrix1),
+  frac11q5 = convert.fraction.data(data.fraction2$data, data.fraction2$q.matrix2)
+)
+```
+```{r}
+empirical_q_data <- append(q_data, q_data2)
+```
+
+```{r}
+set.seed(10)
+df.imv.compare.1.mp <- func.run.empirical.data(empirical_q_data, cdm_model = "DINA", irt_model = "2PL")
+df.imv.compare.2.mp <- func.run.empirical.data(empirical_q_data, cdm_model = "GDINA", irt_model = "2PL")
+df.imv.compare.1.map <- func.run.empirical.data(empirical_q_data, cdm_model = "DINA", irt_model = "2PL", estmethod = "MAP")
+df.imv.compare.2.map <- func.run.empirical.data(empirical_q_data, cdm_model = "GDINA", irt_model = "2PL", estmethod = "MAP")
+```
+
+```{r}
+df.imv.compare.combined <- df.imv.compare.1.mp %>% 
+  mutate(cdm_model = "DINA") %>% 
+  rbind(df.imv.compare.2.mp %>% mutate(cdm_model = "GDINA")) %>% 
+  relocate(dataname, cdm_model) %>% 
+  pivot_wider(names_from = "sample_method", values_from = c("mean_imv",  "sd_imv", "mean_cor", "sd_cor")) %>% 
+  arrange(dataname) %>% 
+  dplyr:: select(dataname, cdm_model, "mean_imv_all", "mean_imv_kfold", "sd_imv_kfold") %>% 
+  add_column(estimate_method = "mp") %>% 
+  rbind(df.imv.compare.1.map %>% 
+  mutate(cdm_model = "DINA") %>% 
+  rbind(df.imv.compare.2.map %>% mutate(cdm_model = "GDINA")) %>% 
+  relocate(dataname, cdm_model) %>% 
+  pivot_wider(names_from = "sample_method", values_from = c("mean_imv",  "sd_imv", "mean_cor", "sd_cor")) %>% 
+  arrange(dataname) %>% 
+  dplyr:: select(dataname, cdm_model, "mean_imv_all", "mean_imv_kfold", "sd_imv_kfold") %>% 
+  add_column(estimate_method = "MAP")) %>% 
+  arrange(dataname, cdm_model, estimate_method) %>% 
+  relocate(dataname, cdm_model, estimate_method)
+```
+```{r}
+#write_csv(df.imv.compare.combined, "analysis/e_analysis_summary.csv")
+```
+
+```{r height = 8}
+df_long <- df.imv.compare.combined %>%
+  pivot_longer(cols = c(mean_imv_all, mean_imv_kfold),
+               names_to = "method",
+               values_to = "mean_imv")
+
+# Create error bar data (set `sd = 0` for mean_imv_all)
+df_error <- df_long %>%
+  mutate(sd = ifelse(method == "mean_imv_kfold", df.imv.compare.combined$sd_imv_kfold, 0))
+
+# Plot with all bars having error bars (but `mean_imv_all` has zero error)
+ggplot(df_long , aes(x = dataname, y = mean_imv, fill = method)) +
+  geom_bar(stat = "identity", width = 0.8, position = position_dodge(width = 0.8)) +  # Adjust dodge width for alignment
+  geom_errorbar(data = df_error, 
+                aes(ymin = mean_imv - sd, ymax = mean_imv + sd, x = dataname),
+                width = 0.5, 
+                position = position_dodge(width = 0.8)) +  # Align error bars with bars
+  labs(x = "Dataset", y = "IMV(2PL, CDM)", title = "Comparision of in-sample data vs out-of-sample fold") +
+  theme_minimal() +
+  facet_grid(estimate_method ~ cdm_model , scales = "free") +
+   theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom"  # Move legend to bottom
+  ) + scale_x_discrete(expand = expansion(mult = c(0.1, 0.1)))
+
+ggplot(df_long %>% filter(estimate_method == "MAP"), aes(x = dataname, y = mean_imv, fill = method)) +
+  geom_bar(stat = "identity", width = 0.8, position = position_dodge(width = 0.8)) +  # Adjust dodge width for alignment
+  geom_errorbar(data = df_error %>% filter(estimate_method == "MAP"), 
+                aes(ymin = mean_imv - sd, ymax = mean_imv + sd, x = dataname),
+                width = 0.5, 
+                position = position_dodge(width = 0.8)) +  # Align error bars with bars
+  labs(x = "Dataset", y = "IMV(2PL, CDM)", title = "Comparision of in-sample data vs out-of-sample fold ('MAP' method)") +
+  theme_minimal() +
+  facet_wrap(~ cdm_model) +
+   theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom"  # Move legend to bottom
+  ) + scale_x_discrete(expand = expansion(mult = c(0.1, 0.1)))
+
+ggplot(df_long %>% filter(estimate_method == "mp"), aes(x = dataname, y = mean_imv, fill = method)) +
+  geom_bar(stat = "identity", width = 0.8, position = position_dodge(width = 0.8)) +  # Adjust dodge width for alignment
+  geom_errorbar(data = df_error %>% filter(estimate_method == "mp"), 
+                aes(ymin = mean_imv - sd, ymax = mean_imv + sd, x = dataname),
+                width = 0.5, 
+                position = position_dodge(width = 0.8)) +  # Align error bars with bars
+  labs(x = "Dataset", y = "IMV(2PL, CDM)", title = "Comparision of in-sample data vs out-of-sample fold ('mp' method)") +
+  theme_minimal() +
+  facet_wrap(~ cdm_model) +
+   theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom"  # Move legend to bottom
+  ) + scale_x_discrete(expand = expansion(mult = c(0.1, 0.1)))
 
 ```
 ```{r}
-run.fraction.data.analysis(data.fraction1$data, data.fraction1$q.matrix)
-```
-```{r}
-run.fraction.data.analysis(data.fraction2$data, data.fraction2$q.matrix1)
-```
-```{r}
-run.fraction.data.analysis(data.fraction2$data, data.fraction2$q.matrix2)
-```
-```{r}
-run.fraction.data.analysis(data.fraction2$data, data.fraction2$q.matrix3)
-```
-```{r}
-run.fraction.data.analysis(data.fraction4$data, data.fraction4$q.matrix %>% dplyr :: select(-item))
-```
-```{r}
-data.fraction5
+ggplot(df_long %>% filter(dataname == "frac20"), aes(x = dataname, y = mean_imv, fill = method)) +
+  geom_bar(stat = "identity", width = 0.5, position = position_dodge(width = 0.5)) +  # Adjust dodge width for alignment
+  geom_errorbar(data = df_error %>% filter(dataname == "frac20"), 
+                aes(ymin = mean_imv - sd, ymax = mean_imv + sd, x = dataname),
+                width = 0.25, 
+                position = position_dodge(width = 0.5)) +  # Align error bars with bars
+  labs(x = "Dataset", y = "IMV(2PL, CDM)", title = "Comparision of in-sample data vs out-of-sample fold") +
+  theme_minimal() +
+  facet_grid(estimate_method ~ cdm_model) +
+   theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom"  # Move legend to bottom
+  ) + ylim(-0.2, 0.05)
+
+ggplot(df_long %>% filter(dataname == "frac20", method != "mean_imv_kfold"), aes(x = dataname, y = mean_imv, fill = method)) +
+  geom_bar(stat = "identity", width = 0.25, position = position_dodge(width = 0.25)) +  # Adjust dodge width for alignment
+  
+  labs(x = "Dataset", y = "IMV(2PL, CDM)", title = "in-sample data prediction") +
+  theme_minimal() +
+  facet_grid(estimate_method ~ cdm_model) +
+   theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom"  # Move legend to bottom
+  ) + ylim(-0.05, 0.05)
 ```
 
 ## Check properties of ED
@@ -561,224 +567,49 @@ cat(table_latex)
 ```
 
 
-## 1PL 
-```{r}
-set.seed(10)
-
-df.imv.compare.1.1pl <- func.run.empirical.data(cdm_model = "DINA", irt_model = "Rasch")
-
-df.imv.compare.2.1pl <- func.run.empirical.data(cdm_model = "DINO", irt_model = "Rasch")
-
-df.imv.compare.3.1pl <- func.run.empirical.data(cdm_model = "GDINA", irt_model = "Rasch")
-```
-
 ## LaTeX table
 ```{r}
 library(kableExtra)
 ```
-
 ```{r}
 # Generate LaTeX Table with Styling
-table_latex <- kable(df.imv.compare.result, format = "latex", caption = "IMV(2PL, CDM) from IRW empirical datasets") %>%
+table_latex <- kable(df.imv.compare.combined, format = "latex", caption = "IMV(2PL, CDM) from IRW empirical datasets") %>%
   kable_styling(latex_options = c("hold_position"))
 
 # Print LaTeX Code
 cat(table_latex)
 ```
-## Parameter Analysis
-```{r}
-func.convert.Q.data.structure.with.held.out <- function(df, heldout_rate){
-  Q <- df %>% 
-     dplyr ::select(-c(id, resp)) %>% 
-    unique() %>% 
-     dplyr ::arrange(item) %>% 
-     dplyr ::select(-c(item))
-  
-  df.held.out <- df %>% 
-     dplyr ::select(item, id, resp) %>% 
-    dplyr :: arrange(item) %>% 
-    mutate(held_out = rbinom(n = n(), size = 1, prob = heldout_rate)) %>% 
-     dplyr ::arrange(id)
-  
-  df.dat <- df.held.out %>% 
-    filter(held_out == 0) %>% 
-     dplyr ::select(-c(held_out)) %>% 
-     dplyr :: arrange(item) %>% 
-    pivot_wider(names_from = item, values_from = resp) %>% 
-     dplyr ::arrange(id) 
-  
-  tables_list <- list()
-  tables_list[['Q']] <- Q
-  tables_list[['dat']] <- df.dat %>%  dplyr ::select(-id)
-  tables_list[['heldout']] <- df.held.out
-  tables_list[['id']] <- df.dat$id
-  
-  
-  return (tables_list)
-}
-```
 
 ```{r}
-df.tmp <- q_data$frac20
+# Sort data by dataname and round numeric columns to 4 decimals
+df_sorted <- df.imv.compare.combined %>%
+  arrange(dataname) %>%
+  mutate(across(where(is.numeric), round, 5)) %>%
+mutate(dataname = ifelse(duplicated(dataname), "", dataname))
+  #dplyr :: select(-dataname)  # Remove dataname from table, but keep for grouping
 
-df.tmp <- df.tmp$to_data_frame()
+# Create LaTeX table with midrules between dataname groups
+table_latex <- kable(
+  df_sorted, 
+  format = "latex", 
+  booktabs = TRUE,  # Ensures \toprule, \midrule, \bottomrule
+  caption = "IMV(2PL, CDM) from IRW empirical datasets",
+  col.names = c("Table", "CDM", "EstimateMethod", "Overfit", "$\\widebar{\\omega}$", "SD($\\omega$)"),  # Format headers
+  escape = FALSE  # Allow LaTeX math formatting
+) %>%
+  kable_styling(latex_options = c("hold_position")) %>%  # Keep table in place
+  add_header_above(c(" " = 3, "IMV Metrics" = 3)) %>%  # Group columns
+  footnote(
+    general_title = "Notes:",
+    general = c("IMV(IRT,CDM) based on in-sample data.", 
+                "$\\omega$ is the IMV(IRT,CDM) for the out-of-sample fold.")
+  ) %>%
+  group_rows(index = table(df.imv.compare.combined$dataname), escape = FALSE)  # Remove bold formatting
 
-
-```
-```{r}
-df.cdm.structure <- func.convert.Q.data.structure.with.held.out(df.tmp, 0)
-```
-
-
-```{r}
-item_list <- sort(unique(df.tmp$item))
-
-fit1 <- GDINA(dat = df.cdm.structure$dat, Q = df.cdm.structure$Q, model = "DINA")
-
-cdm.params <- as.data.frame(coef(object = fit1, what = "gs")) %>% 
-  add_column(item = item_list)
-
-mod.irt <- mirt(df.cdm.structure$dat, 1, itemtype = "2PL")
-  
-params <- data.frame(coef(mod.irt, IRTpars = TRUE, simplify = TRUE))
-  
-irt.params <- params %>% 
-    left_join(rownames_to_column(params, var = "item")) 
-
-result <- cdm.params %>% 
-  left_join(irt.params)
-
-
+# Print LaTeX code
+cat(table_latex)
 ```
 
-```{r}
-get.item.params <- function(q_data){
-  result.final <- tibble()
-  for (obj_name in names(q_data)) {
-    if (!substring(obj_name, 1, 9) %in% c("cdm_timss", "cdm_pisa0", "hmcdm_spa")) {
-      print(obj_name)
-      
-      # Convert the object to a data frame
-      df.tmp <- q_data[[obj_name]]$to_data_frame()
-      
-      df.cdm.structure <- func.convert.Q.data.structure.with.held.out(df.tmp, 0)
-      
-      item_list <- sort(unique(df.tmp$item))
-      
-      fit1 <- GDINA(dat = df.cdm.structure$dat, Q = df.cdm.structure$Q, model = "DINA")
-      
-      cdm.params <- as.data.frame(coef(object = fit1, what = "gs")) %>% 
-        add_column(item = item_list)
-      
-      mod.irt <- mirt(df.cdm.structure$dat, 1, itemtype = "2PL")
-      params <- data.frame(coef(mod.irt, IRTpars = TRUE, simplify = TRUE))
-      
-      irt.params <- params %>% 
-        left_join(rownames_to_column(params, var = "item")) 
-      
-      result <- cdm.params %>% 
-        left_join(irt.params) %>% 
-        add_column(dataname = obj_name)
-      
-      result.final <- result.final %>% rbind(result)
-    }
-  }
-  return (result.final)
-
-}
-```
-
-
-```{r}
-df.params.empirical <- get.item.params(q_data)
-```
-
-```{r}
-df.params.empirical.clean <- df.params.empirical %>% 
-  dplyr :: rename(g = guessing, s = slip, a = items.a, b = items.b) %>% 
-  dplyr :: select(dataname, item, a, b, g, s)
-```
-
-
-```{r}
-create_ggpairs <- function(data, title) {
-  ggpairs(
-    data,
-    columns = c("a", "b", "g", "s"),       # Columns for scatterplot matrix
-    mapping = aes(label = item),          # Map 'item' as point label
-    title = title
-  ) + theme_bw()
-}
-
-for (i in unique(df.params.empirical.clean$dataname)) {
-  create_ggpairs(df.params.empirical.clean %>% filter(dataname == i), i)
-}
-
-```
-```{r}
-# Store the plots in a list
-plot_list <- list()
-
-# Loop through unique datanames and create ggpairs plots
-for (i in unique(df.params.empirical.clean$dataname)) {
-  plot_list[[i]] <- create_ggpairs(
-    df.params.empirical.clean %>% filter(dataname == i),
-    i
-  )
-}
-
-
-```
-
-```{r}
-pdf("plots/empirical_scatterplot_frac20.pdf", width = 5, height = 5)
-
-# Print the plot to the PDF device
-print(plot_list$frac20)
-
-dev.off()
-
-pdf("plots/empirical_scatterplot_cdm_hr.pdf", width = 5, height = 5)
-
-# Print the plot to the PDF device
-print(plot_list$cdm_hr)
-
-dev.off()
-
-pdf("plots/empirical_scatterplot_mcmi_mokken.pdf", width = 5, height = 5)
-
-# Print the plot to the PDF device
-print(plot_list$mcmi_mokken)
-
-dev.off()
-
-pdf("plots/empirical_scatterplot_cdm_ecpe.pdf", width = 5, height = 5)
-
-# Print the plot to the PDF device
-print(plot_list$cdm_ecpe)
-
-# Close the PDF device
-dev.off()
-```
-```{r}
-for (obj_name in names(q_data)) {
-    if (!substring(obj_name, 1, 9) %in% c("cdm_timss", "cdm_pisa0", "hmcdm_spa")) {
-      print(obj_name)
-      
-      # Convert the object to a data frame
-      df.tmp <- q_data[[obj_name]]$to_data_frame()
-      
-      df.cdm.structure <- func.convert.Q.data.structure.with.held.out(df.tmp, 0)
-      
-      print(length(df.cdm.structure$Q))
-      print(length(df.cdm.structure$dat))
-    }
-  }
-```
-
-```{r}
-
-```
 
 
 

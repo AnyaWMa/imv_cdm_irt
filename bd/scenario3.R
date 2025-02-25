@@ -1,6 +1,6 @@
 ##equal share of items load on two dimensions
 source("00funs.R")
-simfun<-function(r,N=1000,bound=NULL) {
+simfun<-function(r,N=500,bound=NULL) {
     library(MASS)
     ##theta
     th<-mvrnorm(N,mu=rep(0,2),Sigma=matrix(c(1,r,r,1),2,2))
@@ -59,12 +59,11 @@ library(parallel)
 L<-list()
 for (bound in c(.1,.2,.3)) L[[as.character(bound)]]<-mclapply(rs,simfun,mc.cores=10,bound=bound)
 
-
 #pdf("/home/bdomingu/Dropbox/Apps/Overleaf/CDM_predictions/scenario3.pdf",width=6,height=3)
 #par(mgp=c(2,1,0),mfrow=c(1,2),mar=c(3,3,1,1),oma=rep(.5,4))
 par(mgp=c(2,1,0),mfrow=c(3,2),mar=c(3,3,1,1),oma=rep(.5,4))
 for (i in 1:length(L)) {
-    plot(NULL,xlim=c(-1,1),ylim=c(0,.6),xlab=expression(rho),ylab='r(true,est)')
+    plot(NULL,xlim=c(-1,1),ylim=c(0,.6),xlab=expression(rho),ylab='RMSE(true,est)')
     pf<-function(x,y,...) {
         m<-loess(y~x)
         lines(x,predict(m),...,lwd=2)
@@ -85,7 +84,7 @@ for (i in 1:length(L)) {
     legend("topright",bty='n',lty=c(1,1,2,2),col=c("blue","red","blue","red"),cex=.7,ncol=2,
            c("(resp,IRT)","(resp,CDM)","(True,IRT)","(True,CDM)"))
 #####
-    plot(NULL,xlim=c(c(-1,1)),ylab="IMV",xlab='a',ylim=c(0,.2))
+    plot(NULL,xlim=c(c(-1,1)),ylab="IMV",xlab=expression(rho),ylim=c(0,.2))
     f<-function(out,...) {
         om<-do.call("rbind",out)
         abline(h=0)

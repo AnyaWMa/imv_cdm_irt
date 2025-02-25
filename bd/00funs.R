@@ -62,7 +62,7 @@ oos.compare<-function(resp,qm,nfolds=5,modeltype) {
 }
 
 
-oos.compare.newresp<-function(resp,qm,truep) {
+oos.compare.newresp<-function(resp,qm,truep, modeltype = "DINA") {
     id<-1:nrow(resp)
     item<-names(resp)
     L<-list()
@@ -73,7 +73,7 @@ oos.compare.newresp<-function(resp,qm,truep) {
     id<-x$id
     x<-x[,names(resp)]
     ##
-    p.cdm<-cdm.pr.marg(x,qm)
+    p.cdm<-cdm.pr.marg.update(x,qm, modeltype)
     L<-list()
     for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],p.cdm=p.cdm[,i])
     p<-do.call("rbind",L)
@@ -134,21 +134,27 @@ oos.compare.2q<-function(resp,qm1,qm2,nfolds=5) {
     mean(om)
 }
 
-cdm.pr.marg<-function(resp,qm,modeltype="DINA") { ##really only works with DINA
-    if (modeltype!="DINA") stop("must be DINA")
-    ##cdm pvalues
-    library(GDINA)
-    m <- GDINA(resp,qm,modeltype)
-    map <- personparm(m, what = "mp")[,1:ncol(qm)]
-    gs<-coef(m,what='gs')
-    p<-list()
-    for (i in 1:nrow(qm)) {
-        ii<-which(qm[i,]==1)
-        z<-map[,ii,drop=FALSE]
-        rm<-apply(z,1,prod)
-        p[[i]]<-(1-gs[i,2])*rm + (1-rm)*gs[i,1]
+cdm.pr.marg<-function(resp,qm,modeltype="DINA") {
+  ##cdm pvalues
+  library(GDINA)
+  m <- GDINA(resp,qm,modeltype)
+  map <- personparm(m, what ="mp")[,1:ncol(qm)]
+  gs<-coef(m,what='gs')
+  p<-list()
+  
+  for (i in 1:nrow(qm)) {
+    ii<-which(qm[i,]==1)
+    z<-map[,ii,drop=FALSE]
+    rm<-apply(z,1,prod)
+    
+    if (modeltype == "DINO"){
+      rm_dino <- 1 - apply(1 - z, 1, prod)
+      p[[i]] <- (1 - gs[i,2]) * rm_dino + (1 - rm_dino) * gs[i,1]
+    } else {
+      p[[i]]<-(1-gs[i,2])*rm + (1-rm)*gs[i,1]
     }
-    p.cdm<-do.call("cbind",p)
+  }
+  p.cdm<-do.call("cbind",p)
 }
 
 cdm.pr.marg2<-function(resp,qm,modeltype="GDINA") { #really only works with GDINA
@@ -178,5 +184,32 @@ cdm.pr.marg2<-function(resp,qm,modeltype="GDINA") { #really only works with GDIN
         p[[i]]<-pr %*% matrix(co[[i]],ncol=1)
     }
     p.cdm<-do.call("cbind",p)
+}
+
+cdm.pr.marg.update<-function(resp,qm,modeltype="DINA",estmethod = "mp") { 
+  library(GDINA)
+  m <- GDINA(resp,qm,modeltype)
+  map <- personparm(m, what = estmethod)[,1:ncol(qm)]
+  co<-coef(m) #gs<-coef(m,what='gs')
+  p<-list()
+  for (i in 1:nrow(qm)) {
+    ii<-which(qm[i,]==1)
+    z<-map[,ii,drop=FALSE]
+    nms<-names(co[[i]])
+    cats<-gsub(")","",gsub("P(","",nms,fixed=TRUE),fixed=TRUE)
+    cats<-strsplit(cats,"")
+    cats<-lapply(cats,as.numeric)
+    cats<-do.call("rbind",cats)
+    pr<-list()
+    for (j in 1:nrow(cats)) {
+      y<-cats[j,]
+      z2<-z
+      for (k in 1:ncol(z2)) if (y[k]==1) z2[,k]<-z[,k] else z2[,k]<-1-z[,k]
+      pr[[j]]<-apply(z2,1,prod)
+    }
+    pr<-do.call("cbind",pr)
+    p[[i]]<-pr %*% matrix(co[[i]],ncol=1)
+  }
+  p.cdm<-do.call("cbind",p)
 }
 
