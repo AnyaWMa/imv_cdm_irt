@@ -1,9 +1,9 @@
+remotes::install_github("hansorlee/irwpkg")
 source("00funs.R") ##https://github.com/AnyaWMa/IRW-Qmatrix/blob/main/bd/00funs.R
-
 
 ################################3
 ##simulate data with naughty cdm
-cdm.sim<-function(a,N=1000,sk.offset=0,nsk=6,bound=NULL) {
+cdm.sim<-function(a,N=500,sk.offset=0,nsk=6,bound=NULL,estmethod="MAP") {
     ##skills
     th<-rnorm(N)
     sk<-runif(nsk)
@@ -47,7 +47,7 @@ a<-sort(runif(100,min=0,max=3))
 library(parallel)
 
 out2<-list()
-for (i in c(.1,.2,.3)) out2[[as.character(i)]]<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5,bound=i)
+for (i in c(.1,.2,.3)) out2[[as.character(i)]]<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5,bound=i, estmethod = "MAP")
 
 
 

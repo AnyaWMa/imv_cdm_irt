@@ -34,6 +34,7 @@ library(MASS)
 library(imv)
 ```
 ```{r}
+remotes::install_github("hansorlee/irwpkg")
 source("bd/00funs.R")
 ```
 
@@ -276,7 +277,7 @@ all(df_frac20_cdm_structure$Q == df_frac20_cdm_structure_gdina$Q)
 df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "GDINA", "2PL", FALSE, 5, cdm.pr.marg.update, "mp")
 ```
 ```{r}
-df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "DINA", "2PL", TRUE, 5, cdm.pr.marg)
+df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "GDINA", "2PL", TRUE, 5, cdm.pr.marg.update)
 ```
 
 
@@ -355,7 +356,6 @@ func.run.empirical.data <- function(q_data, cdm_model = "DINA", irt_model = "2PL
 ### irw-data
 ```{r}
 set.seed(10)
-
 ```
 
 
@@ -438,6 +438,11 @@ df.imv.compare.combined <- df.imv.compare.1.mp %>%
   arrange(dataname, cdm_model, estimate_method) %>% 
   relocate(dataname, cdm_model, estimate_method)
 ```
+
+```{r}
+df.imv.compare.combined
+```
+
 ```{r}
 #write_csv(df.imv.compare.combined, "analysis/e_analysis_summary.csv")
 ```
@@ -496,6 +501,9 @@ ggplot(df_long %>% filter(estimate_method == "mp"), aes(x = dataname, y = mean_i
   ) + scale_x_discrete(expand = expansion(mult = c(0.1, 0.1)))
 
 ```
+
+
+
 ```{r}
 ggplot(df_long %>% filter(dataname == "frac20"), aes(x = dataname, y = mean_imv, fill = method)) +
   geom_bar(stat = "identity", width = 0.5, position = position_dodge(width = 0.5)) +  # Adjust dodge width for alignment
