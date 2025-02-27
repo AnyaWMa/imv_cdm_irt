@@ -34,6 +34,7 @@ library(MASS)
 library(imv)
 ```
 ```{r}
+remotes::install_github("hansorlee/irwpkg")
 source("bd/00funs.R")
 ```
 
@@ -73,7 +74,6 @@ test<-sapply(nms,f)
 q_data<-dataset_tables[test]
 print(length(q_data))
 ```
-
 
 # helper functions 
 ## IRT
@@ -276,9 +276,31 @@ all(df_frac20_cdm_structure$Q == df_frac20_cdm_structure_gdina$Q)
 df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "GDINA", "2PL", FALSE, 5, cdm.pr.marg.update, "mp")
 ```
 ```{r}
-df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "DINA", "2PL", TRUE, 5, cdm.pr.marg)
+df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "GDINA", "2PL", TRUE, 5, cdm.pr.marg.update)
 ```
 
+### Q3: check identifiability of all data 
+```{r}
+
+for (obj_name in names(q_data)) {
+    if (!substring(obj_name, 1, 9) %in% c("cdm_timss", "cdm_pisa0", "hmcdm_spa", "cdm_hr")) {
+      print(obj_name)
+      df <- q_data[[obj_name]]$to_data_frame() 
+      structure <- func.convert.Q.data.structure.with.k.fold(df, 0)
+      print(check.qm.omplete(structure$Q))
+    }
+}
+
+for (obj_name in names(q_data2)) {
+    if (!substring(obj_name, 1, 9) %in% c("cdm_timss", "cdm_pisa0", "hmcdm_spa", "cdm_hr")) {
+      print(obj_name)
+      df <- q_data2[[obj_name]]
+      structure <- func.convert.Q.data.structure.with.k.fold(df, 0)
+      print(check.qm.omplete(structure$Q))
+    }
+}
+  
+```
 
 ## Run all data
 
@@ -291,7 +313,7 @@ func.run.empirical.data <- function(q_data, cdm_model = "DINA", irt_model = "2PL
   
   # Iterate over objects in q_data (adjust the loop as needed for your actual structure)
   for (obj_name in names(q_data)) {
-    if (!substring(obj_name, 1, 9) %in% c("cdm_timss", "cdm_pisa0", "hmcdm_spa")) {
+    if (!substring(obj_name, 1, 9) %in% c("cdm_timss", "cdm_pisa0", "hmcdm_spa", "cdm_hr")) {
       print(obj_name)
       
       # Convert the object to a data frame
@@ -355,7 +377,6 @@ func.run.empirical.data <- function(q_data, cdm_model = "DINA", irt_model = "2PL
 ### irw-data
 ```{r}
 set.seed(10)
-
 ```
 
 
@@ -438,6 +459,11 @@ df.imv.compare.combined <- df.imv.compare.1.mp %>%
   arrange(dataname, cdm_model, estimate_method) %>% 
   relocate(dataname, cdm_model, estimate_method)
 ```
+
+```{r}
+df.imv.compare.combined
+```
+
 ```{r}
 #write_csv(df.imv.compare.combined, "analysis/e_analysis_summary.csv")
 ```
@@ -496,6 +522,9 @@ ggplot(df_long %>% filter(estimate_method == "mp"), aes(x = dataname, y = mean_i
   ) + scale_x_discrete(expand = expansion(mult = c(0.1, 0.1)))
 
 ```
+
+
+
 ```{r}
 ggplot(df_long %>% filter(dataname == "frac20"), aes(x = dataname, y = mean_imv, fill = method)) +
   geom_bar(stat = "identity", width = 0.5, position = position_dodge(width = 0.5)) +  # Adjust dodge width for alignment
@@ -532,7 +561,6 @@ n_p_i <- c()
 n_q <- c()
 for (obj_name in names(q_data)) {
   df <- q_data[[obj_name]]$to_data_frame()
-  
   # Remove "rt" column if it exists
       if ("rt" %in% colnames(df)) {
         df <- df[, !colnames(df) %in% "rt"]

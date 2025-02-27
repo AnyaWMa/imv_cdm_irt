@@ -1,9 +1,9 @@
+remotes::install_github("hansorlee/irwpkg")
 source("00funs.R") ##https://github.com/AnyaWMa/IRW-Qmatrix/blob/main/bd/00funs.R
-
 
 ################################3
 ##simulate data with naughty cdm
-cdm.sim<-function(a,N=1000,sk.offset=0,nsk=6,bound=NULL) {
+cdm.sim<-function(a,N=500,sk.offset=0,nsk=6,bound=NULL,estmethod="MAP") {
     ##skills
     th<-rnorm(N)
     sk<-runif(nsk)
@@ -14,7 +14,17 @@ cdm.sim<-function(a,N=1000,sk.offset=0,nsk=6,bound=NULL) {
     ##qmatrix
     S<-TRUE
     while (S) {
-        qm<-matrix(rbinom(50*nsk,1,.65),50,nsk)
+      I_k <- diag(nsk)
+      
+      # Step 2: Generate a 44 × nsk random binary matrix
+      random_matrix <- matrix(rbinom(44 * nsk, 1, 0.65), 44, nsk)
+      
+      # Step 3: Combine (rbind) the identity matrix with the random matrix
+      combined_matrix <- rbind(I_k, random_matrix)
+      
+      # Step 4: Shuffle the rows randomly
+      qm <- combined_matrix[sample(nrow(combined_matrix)), ]
+      
         S<-any(c(colMeans(qm),rowMeans(qm))==0)
     }        
     ##response probabilities 
@@ -43,13 +53,13 @@ cdm.sim<-function(a,N=1000,sk.offset=0,nsk=6,bound=NULL) {
     ##
     om
 }
-a<-sort(runif(100,min=0,max=3))
+a<-sort(runif(n = 100,min=0,max=3))
 library(parallel)
 
 out2<-list()
-for (i in c(.1,.2,.3)) out2[[as.character(i)]]<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5,bound=i)
-
-
+for (i in c(.1,.2,.3)) out2[[as.character(i)]]<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5,bound=i, estmethod = "mp")
+out2[["a"]] <- a
+save(out2 , file = "../simulation_data/out_dina_offset15.RData")
 
 #pdf("/home/bdomingu/Dropbox/Apps/Overleaf/CDM_predictions/scenario1.pdf",width=6,height=3)
 par(mgp=c(2,1,0),mfrow=c(3,2),mar=c(3,3,1,1),oma=rep(.5,4))

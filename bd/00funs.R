@@ -62,18 +62,19 @@ oos.compare<-function(resp,qm,nfolds=5,modeltype) {
 }
 
 
-oos.compare.newresp<-function(resp,qm,truep, modeltype = "DINA") {
+oos.compare.newresp<-function(resp,qm,truep, modeltype = "DINA",estmethod = "mp") {
     id<-1:nrow(resp)
     item<-names(resp)
     L<-list()
     for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],resp=resp[,i],truep=truep[,i])
     df<-do.call("rbind",L)
     om<-numeric()
-    x<-irwpkg::irw_long2resp(df)
+    x<-irw::long2resp(df)
     id<-x$id
+    print(x)
     x<-x[,names(resp)]
     ##
-    p.cdm<-cdm.pr.marg.update(x,qm, modeltype)
+    p.cdm<-cdm.pr.marg.update(x,qm, modeltype, estmethod)
     L<-list()
     for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],p.cdm=p.cdm[,i])
     p<-do.call("rbind",L)
@@ -188,7 +189,7 @@ cdm.pr.marg2<-function(resp,qm,modeltype="GDINA") { #really only works with GDIN
 
 cdm.pr.marg.update<-function(resp,qm,modeltype="DINA",estmethod = "mp") { 
   library(GDINA)
-  m <- GDINA(resp,qm,modeltype)
+  m <- GDINA(resp,qm,modeltype, mono.constr = TRUE)
   map <- personparm(m, what = estmethod)[,1:ncol(qm)]
   co<-coef(m) #gs<-coef(m,what='gs')
   p<-list()
@@ -211,5 +212,20 @@ cdm.pr.marg.update<-function(resp,qm,modeltype="DINA",estmethod = "mp") {
     p[[i]]<-pr %*% matrix(co[[i]],ncol=1)
   }
   p.cdm<-do.call("cbind",p)
+}
+
+
+check.qm.omplete <- function(qm) {
+  K <- ncol(qm)  # Number of skills (attributes)
+  
+  # Find rows that have exactly one '1' (single-attribute items)
+  single_attribute_rows <- apply(qm, 1, function(row) ifelse(sum(row) == 1, which(row == 1), NA))
+  
+  # Extract unique skills (columns) covered by single-attribute items
+  unique_single_skills <- unique(na.omit(single_attribute_rows))
+  
+  # Check if all K skills are covered
+  return(length(unique_single_skills) == K)
+    
 }
 
