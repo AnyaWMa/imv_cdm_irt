@@ -75,7 +75,6 @@ q_data<-dataset_tables[test]
 print(length(q_data))
 ```
 
-
 # helper functions 
 ## IRT
 ```{r}
@@ -280,6 +279,28 @@ df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "GDINA", "2PL", FALSE, 
 df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "GDINA", "2PL", TRUE, 5, cdm.pr.marg.update)
 ```
 
+### Q3: check identifiability of all data 
+```{r}
+
+for (obj_name in names(q_data)) {
+    if (!substring(obj_name, 1, 9) %in% c("cdm_timss", "cdm_pisa0", "hmcdm_spa", "cdm_hr")) {
+      print(obj_name)
+      df <- q_data[[obj_name]]$to_data_frame() 
+      structure <- func.convert.Q.data.structure.with.k.fold(df, 0)
+      print(check.qm.omplete(structure$Q))
+    }
+}
+
+for (obj_name in names(q_data2)) {
+    if (!substring(obj_name, 1, 9) %in% c("cdm_timss", "cdm_pisa0", "hmcdm_spa", "cdm_hr")) {
+      print(obj_name)
+      df <- q_data2[[obj_name]]
+      structure <- func.convert.Q.data.structure.with.k.fold(df, 0)
+      print(check.qm.omplete(structure$Q))
+    }
+}
+  
+```
 
 ## Run all data
 
@@ -292,7 +313,7 @@ func.run.empirical.data <- function(q_data, cdm_model = "DINA", irt_model = "2PL
   
   # Iterate over objects in q_data (adjust the loop as needed for your actual structure)
   for (obj_name in names(q_data)) {
-    if (!substring(obj_name, 1, 9) %in% c("cdm_timss", "cdm_pisa0", "hmcdm_spa")) {
+    if (!substring(obj_name, 1, 9) %in% c("cdm_timss", "cdm_pisa0", "hmcdm_spa", "cdm_hr")) {
       print(obj_name)
       
       # Convert the object to a data frame
@@ -540,7 +561,6 @@ n_p_i <- c()
 n_q <- c()
 for (obj_name in names(q_data)) {
   df <- q_data[[obj_name]]$to_data_frame()
-  
   # Remove "rt" column if it exists
       if ("rt" %in% colnames(df)) {
         df <- df[, !colnames(df) %in% "rt"]

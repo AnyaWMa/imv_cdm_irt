@@ -214,3 +214,18 @@ cdm.pr.marg.update<-function(resp,qm,modeltype="DINA",estmethod = "mp") {
   p.cdm<-do.call("cbind",p)
 }
 
+
+check.qm.omplete <- function(qm) {
+  K <- ncol(qm)  # Number of skills (attributes)
+  
+  # Find rows that have exactly one '1' (single-attribute items)
+  single_attribute_rows <- apply(qm, 1, function(row) ifelse(sum(row) == 1, which(row == 1), NA))
+  
+  # Extract unique skills (columns) covered by single-attribute items
+  unique_single_skills <- unique(na.omit(single_attribute_rows))
+  
+  # Check if all K skills are covered
+  return(length(unique_single_skills) == K)
+    
+}
+
