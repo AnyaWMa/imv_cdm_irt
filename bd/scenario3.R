@@ -1,4 +1,5 @@
 ##equal share of items load on two dimensions
+remotes::install_github("hansorlee/irwpkg")
 source("00funs.R")
 simfun<-function(r,N=500,bound=NULL) {
     library(MASS)
@@ -16,11 +17,16 @@ simfun<-function(r,N=500,bound=NULL) {
     ##
     S<-TRUE
     while (S) {
-        qm<-matrix(rbinom(50*6,1,.5),50,6)
+        I_k <- diag(6)
+        
+        random_matrix<-matrix(rbinom(44*6,1,.5),44,6)
         ##block out loadings across thetas
-        for (i in 1:25) qm[i,4:6]<-0
-        for (i in 26:50) qm[i,1:3]<-0
-        S<-any(c(colMeans(qm),rowMeans(qm))==0)
+        for (i in 1:22) random_matrix[i,4:6]<-0
+        for (i in 23:44) random_matrix[i,1:3]<-0
+        combined_matrix <- rbind(I_k, random_matrix)
+        
+        qm <- combined_matrix[sample(nrow(combined_matrix)), ]
+        S <-any(c(colMeans(qm),rowMeans(qm))==0)
     }        
     ##response probabilities 
     pL<-respL<-list()
@@ -59,7 +65,10 @@ library(parallel)
 L<-list()
 for (bound in c(.1,.2,.3)) L[[as.character(bound)]]<-mclapply(rs,simfun,mc.cores=10,bound=bound)
 
-#pdf("/home/bdomingu/Dropbox/Apps/Overleaf/CDM_predictions/scenario3.pdf",width=6,height=3)
+#L[["rs"]] <- rs
+#save(L , file = "../simulation_data/scenario2_dina.RData")
+
+pdf("../plots/scenario2_update.pdf",width=6,height=3)
 #par(mgp=c(2,1,0),mfrow=c(1,2),mar=c(3,3,1,1),oma=rep(.5,4))
 par(mgp=c(2,1,0),mfrow=c(3,2),mar=c(3,3,1,1),oma=rep(.5,4))
 for (i in 1:length(L)) {
@@ -99,4 +108,4 @@ for (i in 1:length(L)) {
            )
     ##
 }
-#dev.off()
+dev.off()

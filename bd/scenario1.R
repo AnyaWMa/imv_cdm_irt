@@ -1,9 +1,9 @@
 remotes::install_github("hansorlee/irwpkg")
 source("00funs.R") ##https://github.com/AnyaWMa/IRW-Qmatrix/blob/main/bd/00funs.R
-
+library(GDINA)
 ################################3
 ##simulate data with naughty cdm
-cdm.sim<-function(a,N=500,sk.offset=0,nsk=6,bound=NULL,estmethod="MAP") {
+cdm.sim<-function(a,N=500,sk.offset=0,nsk=6,bound=NULL, modeltype = "DINA",estmethod="MAP") {
     ##skills
     th<-rnorm(N)
     sk<-runif(nsk)
@@ -13,20 +13,28 @@ cdm.sim<-function(a,N=500,sk.offset=0,nsk=6,bound=NULL,estmethod="MAP") {
     sk<-apply(p,2,function(x) rbinom(nrow(p),1,p))
     ##qmatrix
     S<-TRUE
-    while (S) {
-      I_k <- diag(nsk)
-      
-      # Step 2: Generate a 44 × nsk random binary matrix
-      random_matrix <- matrix(rbinom(44 * nsk, 1, 0.65), 44, nsk)
-      
-      # Step 3: Combine (rbind) the identity matrix with the random matrix
-      combined_matrix <- rbind(I_k, random_matrix)
-      
-      # Step 4: Shuffle the rows randomly
-      qm <- combined_matrix[sample(nrow(combined_matrix)), ]
-      
-        S<-any(c(colMeans(qm),rowMeans(qm))==0)
-    }        
+    
+    n_valid <- 44     # desired number of valid rows
+    
+    # Initialize an empty matrix to store valid rows
+    valid_rows <- matrix(nrow = 0, ncol = nsk)
+    
+    # Loop until we have 50 valid rows
+    while (nrow(valid_rows) < n_valid) {
+      #prevalence of skills in items
+      ps <- rnorm(1, mean = 0.35, sd = 0.15)
+      candidate <- rbinom(nsk, 1, ps)  # Generate one candidate row
+      if (any(is.na(candidate)) || all(candidate == 0)) next
+      valid_rows <- rbind(valid_rows, candidate)
+    }
+    
+    # Create the identity matrix
+    I_k <- diag(nsk)
+    # Combine the identity matrix with the 50 valid rows to form the Q-matrix
+    qm <- rbind(I_k, valid_rows)
+    # Display the resulting Q-matrix
+    rownames(qm) <- NULL
+  
     ##response probabilities 
     pL<-respL<-list()
     if (is.null(bound)) {
@@ -36,6 +44,45 @@ cdm.sim<-function(a,N=500,sk.offset=0,nsk=6,bound=NULL,estmethod="MAP") {
         g<-rep(bound,nrow(qm))
         s<-rep(bound,nrow(qm))
     }
+    
+    gs <- cbind(unlist(g), unlist(s))
+    if (modeltype == "GDINA"){
+      simD <- simGDINA(N,qm,gs.parm = gs, model = "GDINA",attribute = sk)
+      dat <- extract(simD,"dat")
+      resp <- as.data.frame(dat)
+      names(resp)<-paste("i",1:ncol(resp),sep='')
+      
+      J <- nrow(qm)  # number of items
+      co <- simD$catprob.parm
+      p<-list()
+      
+      for (i in 1:nrow(qm)) {
+        ii<-which(qm[i,]==1)
+        z<-sk[,ii,drop=FALSE]
+        nms<-names(co[[i]])
+        cats<-gsub(")","",gsub("P(","",nms,fixed=TRUE),fixed=TRUE)
+        cats<-strsplit(cats,"")
+        cats<-lapply(cats,as.numeric)
+        cats<-do.call("rbind",cats)
+        pr<-list()
+        for (j in 1:nrow(cats)) {
+          y<-cats[j,]
+          
+          z2<-z
+          for (k in 1:ncol(z2)) if (y[k]==1) z2[,k]<-z[,k] else z2[,k]<-1-z[,k]
+          #print(z2)
+          pr[[j]]<-apply(z2,1,prod)
+          
+        }
+        
+        pr<-do.call("cbind",pr)
+        p[[i]]<-pr %*% matrix(co[[i]],ncol=1)
+        
+      }
+      p.true <- do.call("cbind", p)
+      
+    }
+    else {
     for (i in 1:nrow(qm)) {
         ii<-which(qm[i,]==1)
         z<-sk[,ii,drop=FALSE]
@@ -48,8 +95,9 @@ cdm.sim<-function(a,N=500,sk.offset=0,nsk=6,bound=NULL,estmethod="MAP") {
     p.true<-do.call("cbind",pL)
     resp<-as.data.frame(resp)
     names(resp)<-paste("i",1:ncol(resp),sep='')
+    }
     ##cv imv values
-    om<-oos.compare.newresp(resp,qm,truep=p.true)
+    om<-oos.compare.newresp(resp,qm,truep=p.true, modeltype = modeltype, estmethod = estmethod)
     ##
     om
 }
@@ -57,9 +105,12 @@ a<-sort(runif(n = 100,min=0,max=3))
 library(parallel)
 
 out2<-list()
-for (i in c(.1,.2,.3)) out2[[as.character(i)]]<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5,bound=i, estmethod = "mp")
-out2[["a"]] <- a
-save(out2 , file = "../simulation_data/out_dina_offset15.RData")
+for (i in c(.1, 0.2, 0.3)) out2[[as.character(i)]]<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5,bound=i,  modeltype = "GDINA",estmethod = "mp")
+#out2[["a"]] <- a
+
+out2dina<-list()
+for (i in c(.1)) out2dina[[as.character(i)]]<-mclapply(a,cdm.sim,mc.cores=10,sk.offset=1.5,bound=i,  modeltype = "DINA",estmethod = "mp")
+#save(out2 , file = "../simulation_data/out_dina_offset15_ps035.RData")
 
 #pdf("/home/bdomingu/Dropbox/Apps/Overleaf/CDM_predictions/scenario1.pdf",width=6,height=3)
 par(mgp=c(2,1,0),mfrow=c(3,2),mar=c(3,3,1,1),oma=rep(.5,4))
@@ -86,7 +137,7 @@ for (i in 1:length(out2)) {
     legend("topright",bty='n',lty=c(1,1,2,2),col=c("blue","red","blue","red"),cex=.7,
            c("(resp,IRT)","(resp,CDM)","(True,IRT)","(True,CDM)"))
 #####
-    plot(NULL,xlim=c(0,3),ylab="IMV",xlab='a',ylim=c(0,.15))
+    plot(NULL,xlim=c(0,3),ylab="IMV",xlab='a',ylim=c(-.1,.1))
     f<-function(out,...) {
         om<-do.call("rbind",out)
         abline(h=0)

@@ -28,7 +28,7 @@ irt.pr<-function(resp,modeltype='Rasch',th.type='EAP') {
 ##     p.cdm<-do.call("cbind",p)
 ## }
 
-oos.compare<-function(resp,qm,nfolds=5,modeltype) {
+oos.compare<-function(resp,qm,nfolds=5,modeltype,estmethod = "mp") {
     id<-1:nrow(resp)
     item<-names(resp)
     L<-list()
@@ -40,17 +40,17 @@ oos.compare<-function(resp,qm,nfolds=5,modeltype) {
     for (gr in unique(df$gr)) {
         oos<-df[df$gr==gr,]
         ins<-df[df$gr!=gr,]
-        x<-irwpkg::irw_long2resp(ins)
+        x<-irw::long2resp(df)
         id<-x$id
         x<-x[,names(resp)]
         ##
-        p.cdm<-cdm.pr.marg(x,qm)
+        p.cdm<-cdm.pr.marg.update(x,qm, modeltype, estmethod)
         L<-list()
         for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],p.cdm=p.cdm[,i])
         p<-do.call("rbind",L)
         oos<-merge(oos,p)
         ##
-        p.irt<-irt.pr(x,,modeltype=modeltype)
+        p.irt<-irt.pr(x)
         L<-list()
         for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],p.irt=p.irt[,i])
         p<-do.call("rbind",L)
@@ -61,6 +61,44 @@ oos.compare<-function(resp,qm,nfolds=5,modeltype) {
     mean(om)
 }
 
+oos.compare.update <-function(resp,qm,truep, nfolds=5,modeltype,estmethod = "mp") {
+  id<-1:nrow(resp)
+  item<-names(resp)
+  L<-list()
+  for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],resp=resp[,i],truep=truep[,i])
+  df<-do.call("rbind",L)
+  df$gr<-sample(1:nfolds,nrow(df),replace=TRUE)
+  om<-numeric()
+  om.cdm<-numeric()
+  om.irt<-numeric()
+  for (gr in unique(df$gr)) {
+    oos<-df[df$gr==gr,]
+    ins<-df[df$gr!=gr,]
+    x<-irw::long2resp(df)
+    id<-x$id
+    x<-x[,names(resp)]
+    ##
+    p.cdm<-cdm.pr.marg.update(x,qm, modeltype, estmethod)
+    L<-list()
+    for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],p.cdm=p.cdm[,i])
+    p<-do.call("rbind",L)
+    oos<-merge(oos,p)
+    ##
+    p.irt<-irt.pr(x)
+    L<-list()
+    for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],p.irt=p.irt[,i])
+    p<-do.call("rbind",L)
+    oos<-merge(oos,p)
+    
+    
+    ##
+    om[gr]<-imv::imv.binary(oos$resp,oos$p.irt,oos$p.cdm)
+    om.cdm[gr]<-imv::imv.binary(oos$resp,oos$p.cdm,oos$truep)
+    om.irt[gr]<-imv::imv.binary(oos$resp,oos$p.irt,oos$truep)
+  }
+  c(mean(om), mean(om.cdm), mean(om.irt))
+  
+}
 
 oos.compare.newresp<-function(resp,qm,truep, modeltype = "DINA",estmethod = "mp") {
     id<-1:nrow(resp)
@@ -186,6 +224,7 @@ cdm.pr.marg2<-function(resp,qm,modeltype="GDINA") { #really only works with GDIN
     }
     p.cdm<-do.call("cbind",p)
 }
+
 
 cdm.pr.marg.update<-function(resp,qm,modeltype="DINA",estmethod = "mp") { 
   library(GDINA)

@@ -34,7 +34,7 @@ library(MASS)
 library(imv)
 ```
 ```{r}
-remotes::install_github("hansorlee/irwpkg")
+#remotes::install_github("hansorlee/irwpkg")
 source("bd/00funs.R")
 ```
 
@@ -45,6 +45,7 @@ opts_chunk$set(comment = "")
 # suppresses warning about grouping 
 options(dplyr.summarise.inform = F)
 ```
+
 
 # Load IRW
 ```{r}
@@ -584,7 +585,7 @@ for (obj_name in names(q_data)) {
 ```{r}
 empirical_data_descp <- tibble(datanames = obj_names, n_participants = n_p, n_items = n_i, n_attributes = n_q) %>% 
   arrange(n_attributes) %>% 
-  filter(!datanames %in% c("hmcdm_spatialreasoning", "cdm_pisa00R"))
+  filter(!datanames %in% c("hmcdm_spatialreasoning", "cdm_hr", "cdm_pisa00R"))
 ```
 ```{r}
 table_latex <- kable(empirical_data_descp, format = "latex", caption = "IRW empirical datasets descriptions") %>%
@@ -594,6 +595,51 @@ table_latex <- kable(empirical_data_descp, format = "latex", caption = "IRW empi
 cat(table_latex)
 ```
 
+
+### check the structure of Qmatrix
+```{r}
+obj_name = "cdm_ecpe"
+df <- q_data[[obj_name]]$to_data_frame() 
+```
+
+```{r}
+q_matrix <- func.convert.Q.data.structure.with.k.fold(df, 5)$Q
+```
+
+```{r}
+mean(rowMeans(frac20$Q))
+sd(rowMeans(frac20$Q))
+```
+
+```{r}
+q_matrix <- as.matrix(q_matrix)  # Convert to matrix
+q_matrix <- apply(q_matrix, 2, as.numeric)
+co_occurrence <- t(q_matrix) %*% q_matrix
+#print(co_occurrence)
+
+# Convert adjacency matrix into an edge list
+edges <- which(adj_matrix > 0, arr.ind = TRUE)
+print(edges)
+# Create a data frame of edges (directed from colnames[edges[,1]] → colnames[edges[,2]])
+edge_list <- data.frame(
+  from = colnames(q_matrix)[edges[, 1]],
+  to = colnames(q_matrix)[edges[, 2]],
+  weight = adj_matrix[edges]  # Edge weights based on co-occurrence
+) %>% filter(!is.na(from), !is.na(to))
+
+print(edge_list)  # View edges
+
+# Create directed graph using igraph
+g <- graph_from_data_frame(edge_list, directed = TRUE)
+
+# Plot the directed graph using ggraph
+ggraph(g, layout = "fr") +  # "fr" = Force-directed layout
+  geom_edge_link(aes(edge_alpha = weight), arrow = arrow(length = unit(4, 'mm')), end_cap = circle(3, 'mm')) +
+  geom_node_point(size = 4, color = "red") +  # Node style
+  geom_node_text(aes(label = name), vjust = 1.5, size = 4) +  # Label nodes
+  theme_void()  # Clean theme
+```
+```
 
 ## LaTeX table
 ```{r}

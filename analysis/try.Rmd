@@ -1,0 +1,150 @@
+---
+title: "GDINA thing"
+author: "Wanjing Anya Ma"
+date:  "`r Sys.Date()`"
+output:
+  bookdown::html_document2:
+    toc: true
+    toc_depth: 4
+    theme: cosmo
+    highlight: tango
+    
+---
+
+# Data Preprocessing
+## Load Packages
+Let's first load the packages that we need for this chapter. 
+
+```{r, message=FALSE, warning = FALSE, echo = FALSE}
+library("knitr") # for rendering the RMarkdown file
+library("tidyverse") # for data wrangling 
+library(dplyr)
+library(mirt)
+library('ggpubr')
+library(Metrics)
+library(hash)
+library(ggplot2)
+library(GGally)
+library(gridExtra)
+library(rstudioapi)
+library(TAM)
+library(mgcv)
+library(GDINA)
+library(MASS)
+library(imv)
+remotes::install_github("hansorlee/irwpkg")
+library("irw")
+```
+```{r}
+source("bd/00funs.R")
+```
+
+
+
+
+
+```{r}
+Q <- sim30GDINA$simQ
+K <- ncol(Q)
+diverg <- list(c(1,2),
+c(2,3),
+c(1,4),
+c(4,5))
+linear <- list(c(1,2), c(2,3), c(3,4), c(4,5))
+struc <- att.structure(diverg,K)
+#struc <- att.structure(linear,K)
+set.seed(123)
+# data simulation
+N <- 1000
+true.lc <- sample(c(1:2^K),N,replace=TRUE,prob=struc$att.prob)
+
+true.att <- attributepattern(K)[true.lc,]
+gs <- matrix(rep(0.1,2*nrow(Q)),ncol=2)
+
+# data simulation
+simD <- simGDINA(N,Q,gs.parm = gs, model = "GDINA",attribute = true.att)
+
+dat <-simD$dat #extract(simD,"dat")
+
+resp <- as.data.frame(dat)
+names(resp)<-paste("i",1:ncol(resp),sep='')
+```
+
+
+```{r}
+J <- nrow(Q)  # number of items
+co <- simD$catprob.parm
+p<-list()
+
+for (i in 1:nrow(Q)) {
+    ii<-which(Q[i,]==1)
+    z<-true.att[,ii,drop=FALSE]
+    nms<-names(co[[i]])
+    cats<-gsub(")","",gsub("P(","",nms,fixed=TRUE),fixed=TRUE)
+    cats<-strsplit(cats,"")
+    cats<-lapply(cats,as.numeric)
+    cats<-do.call("rbind",cats)
+    pr<-list()
+    for (j in 1:nrow(cats)) {
+      y<-cats[j,]
+
+      z2<-z
+      for (k in 1:ncol(z2)) if (y[k]==1) z2[,k]<-z[,k] else z2[,k]<-1-z[,k]
+       #print(z2)
+      pr[[j]]<-apply(z2,1,prod)
+      
+    }
+    
+    pr<-do.call("cbind",pr)
+    p[[i]]<-pr %*% matrix(co[[i]],ncol=1)
+   
+  }
+  p.true <- do.call("cbind", p)
+  
+```
+
+# linear
+```{r}
+oos.compare.update(resp,Q,p.true,nfolds=5,modeltype = "GDINA",estmethod = "mp") 
+```
+# divergent 
+```{r}
+oos.compare.update(resp,Q,p.true,nfolds=5,modeltype = "GDINA",estmethod = "mp") 
+```
+
+```{r}
+oos.compare.newresp(resp,Q,p.true, modeltype = "GDINA",estmethod = "mp") 
+```
+
+```{r}
+oos.compare.newresp(resp,Q,p.true, modeltype = "GDINA",estmethod = "mp") 
+```
+
+
+```{r}
+# Set parameters
+nsk <- 6          # number of skills/attributes per row
+n_valid <- 44     # desired number of valid rows
+
+# Initialize an empty matrix to store valid rows
+valid_rows <- matrix(nrow = 0, ncol = nsk)
+
+# Loop until we have 50 valid rows
+while (nrow(valid_rows) < n_valid) {
+  candidate <- rbinom(nsk, 1, 0.5)  # Generate one candidate row
+  if (all(candidate == 0)) next      # Skip if the row is all 0s
+  valid_rows <- rbind(valid_rows, candidate)
+}
+
+# Create the identity matrix
+I_k <- diag(nsk)
+
+# Combine the identity matrix with the 50 valid rows to form the Q-matrix
+q_matrix <- rbind(I_k, valid_rows)
+
+# Display the resulting Q-matrix
+
+rownames(q_matrix) <- NULL
+q_matrix
+```
+
