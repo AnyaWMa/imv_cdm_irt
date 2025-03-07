@@ -39,9 +39,9 @@ library("irw")
 source("bd/00funs.R")
 ```
 
-
-
-
+```{r}
+hist(rowMeans(frac20$Q))
+```
 
 ```{r}
 Q <- sim30GDINA$simQ
@@ -146,5 +146,124 @@ q_matrix <- rbind(I_k, valid_rows)
 
 rownames(q_matrix) <- NULL
 q_matrix
+```
+
+# Frac20 data structure 
+```{r}
+library(ggcorrplot)
+```
+
+```{r}
+response_df <- frac20$dat
+cor_matrix_spearman <- cor(response_df, use = "pairwise.complete.obs", method = "pearson")
+# Plot heatmap
+ggcorrplot(cor_matrix_spearman, 
+           lab = TRUE,               # Show correlation values
+           lab_size = 2,             # Font size for labels
+           #method = "square",        # Square tiles
+           #type = "lower",           # Show only lower triangle
+           colors = c("blue", "white", "red"), # Color scale
+           title = "Item Correlation Heatmap",
+           ggtheme = theme_minimal())
+```
+```{r}
+total_correct <- colSums(response_df)
+total_correct
+```
+```{r}
+response_df
+```
+
+```{r}
+response_matrix <- matrix(sample(0:1, 50, replace = TRUE), nrow = 10, ncol = 5)
+colnames(response_matrix) <- paste0("Item", 1:5)
+
+# Convert to dataframe
+response_df <- as.data.frame(response_matrix)
+response_df
+```
+```{r}
+library(igraph)
+library(ggraph)
+library(viridis)  # For viridis color scale
+
+```
+
+```{r}
+
+response_matrix <- as.matrix(sapply(response_df, as.numeric))
+
+# Compute co-occurrence matrix
+co_occurrence_matrix <- t(response_matrix) %*% response_matrix
+# Compute co-occurrence matrix: Students who got both items corr
+edge_list <- as.data.frame(as.table(co_occurrence_matrix))
+colnames(edge_list) <- c("Item1", "Item2", "Weight")
+
+# Remove self-loops and low-weight edges if necessary
+#edge_list <- edge_list[edge_list$Item1 != edge_list$Item2 & edge_list$Percentage > 0.05, ]
+edge_list <- edge_list[edge_list$Item1 != edge_list$Item2 & edge_list$Weight > 0, ]
+edge_list <- edge_list %>% filter(Weight > 200)
+# Create graph object
+graph <- graph_from_data_frame(edge_list, directed = FALSE)
+
+# Plot the network graph
+ggraph(graph, layout = "fr") + 
+  geom_edge_link(aes(color = Weight), alpha = 0.5) +  # Use 'Weight' for both width & color
+  geom_node_point(size = 5) + 
+  geom_node_text(aes(label = name), repel = TRUE) +
+  scale_edge_color_viridis() +  # Correct function name
+  scale_edge_width_continuous(range = c(0.5, 5)) +  # Adjust thickness
+  theme_minimal() +
+  ggtitle("Network Graph of Item Co-occurrence")
+```
+
+```{r}
+frac20$Q
+
+response_Q <- frac20$Q
+cor_matrix_spearman <- cor(response_Q, use = "pairwise.complete.obs", method = "pearson")
+# Plot heatmap
+ggcorrplot(cor_matrix_spearman, 
+           lab = TRUE,               # Show correlation values
+           lab_size = 2,             # Font size for labels
+           #method = "square",        # Square tiles
+           #type = "lower",           # Show only lower triangle
+           colors = c("blue", "white", "red"), # Color scale
+           title = "Item Correlation Heatmap",
+           ggtheme = theme_minimal())
+
+response_matrix <- as.matrix(sapply(response_Q, as.numeric))
+
+# Compute co-occurrence matrix
+co_occurrence_matrix <- t(response_matrix) %*% response_matrix
+# Compute co-occurrence matrix: Students who got both items corr
+edge_list <- as.data.frame(as.table(co_occurrence_matrix))
+colnames(edge_list) <- c("Item1", "Item2", "Weight")
+
+# Remove self-loops and low-weight edges if necessary
+#edge_list <- edge_list[edge_list$Item1 != edge_list$Item2 & edge_list$Percentage > 0.05, ]
+edge_list <- edge_list[edge_list$Item1 != edge_list$Item2 & edge_list$Weight > 0, ]
+# Create graph object
+graph <- graph_from_data_frame(edge_list, directed = FALSE)
+
+# Plot the network graph
+ggraph(graph, layout = "fr") + 
+  geom_edge_link(aes(color = Weight), alpha = 0.5) +  # Use 'Weight' for both width & color
+  geom_node_point(size = 5) + 
+  geom_node_text(aes(label = name), repel = TRUE) +
+  scale_edge_color_viridis() +  # Correct function name
+  scale_edge_width_continuous(range = c(0.5, 5)) +  # Adjust thickness
+  theme_minimal() +
+  ggtitle("Network Graph of Item Co-occurrence")
+```
+```{r}
+library(cluster)
+
+# Compute hierarchical clustering
+dist_matrix <- dist(response_Q)  # Compute distance between items
+hc <- hclust(dist_matrix, method = "ward.D2")  # Cluster items
+
+# Plot the hierarchical tree
+plot(hc, main = "Hierarchical Tree of Q-Matrix", xlab = "Items", ylab = "Distance")
 ```
 
