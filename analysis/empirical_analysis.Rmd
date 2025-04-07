@@ -380,8 +380,6 @@ func.run.empirical.data <- function(q_data, cdm_model = "DINA", irt_model = "2PL
 set.seed(10)
 ```
 
-
-
 ### non-irw data
 timss data 
 ```{r}
@@ -405,6 +403,15 @@ timss2011_ready <- timss_data_with_id %>%
   
 ```
 
+mental health data
+```{r}
+load("data/CDM_AlcoholApplication_Data_IRW.RData")
+
+mental_health_ready <- df %>% 
+  rename(resp = "response", V1 = "Qmatrix_skill1", V2 = "Qmatrix_skill2", V3 = "Qmatrix_skill3", V4 = "Qmatrix_skill4")
+```
+
+
 ```{r}
 convert.fraction.data <- function(dat, Q) {
   
@@ -423,6 +430,7 @@ convert.fraction.data <- function(dat, Q) {
 ```{r}
 q_data2 <- list(
   timss_2011 = timss2011_ready, 
+  mental_health = mental_health_ready,
   frac15q5 = convert.fraction.data(data.fraction1$data, data.fraction1$q.matrix),
   frac11q3 = convert.fraction.data(data.fraction2$data, data.fraction2$q.matrix1),
   frac11q5 = convert.fraction.data(data.fraction2$data, data.fraction2$q.matrix2)
@@ -461,12 +469,9 @@ df.imv.compare.combined <- df.imv.compare.1.mp %>%
   relocate(dataname, cdm_model, estimate_method)
 ```
 
-```{r}
-df.imv.compare.combined
-```
 
 ```{r}
-#write_csv(df.imv.compare.combined, "analysis/e_analysis_summary.csv")
+write_csv(df.imv.compare.combined, "analysis/e_analysis_summary.csv")
 ```
 
 ```{r height = 8}
@@ -523,34 +528,60 @@ ggplot(df_long %>% filter(estimate_method == "mp"), aes(x = dataname, y = mean_i
   ) + scale_x_discrete(expand = expansion(mult = c(0.1, 0.1)))
 
 ```
+```{r}
+df_long_modified <- df_long %>% 
+  mutate(method = ifelse(method == "mean_imv_all", "in-sample", "out-of-sample fold")) %>% 
+  rename(Method = method) 
 
+
+df_error <- df_long_modified %>%
+  mutate(sd = ifelse(Method == "out-of-sample fold", df.imv.compare.combined$sd_imv_kfold, 0))
+```
+
+```{r}
+ggplot(df_long_modified , aes(x = dataname, y = mean_imv, fill = Method)) +
+  geom_bar(stat = "identity", width = 0.8, position = position_dodge(width = 0.8)) +  # Adjust dodge width for alignment
+  geom_errorbar(data = df_error, 
+                aes(ymin = mean_imv - sd, ymax = mean_imv + sd, x = dataname),
+                width = 0.5, 
+                position = position_dodge(width = 0.8)) +  # Align error bars with bars
+  labs(x = "Dataset", y = "IMV(2PL, CDM)") +
+  theme_minimal() +
+  facet_grid(estimate_method ~ cdm_model , scales = "free") +
+   theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom"  # Move legend to bottom
+  ) + scale_x_discrete(expand = expansion(mult = c(0.1, 0.1)))
+
+ggsave("plots/empirical_analysis.pdf", width = 6, height = 4)
+```
 
 
 ```{r}
-ggplot(df_long %>% filter(dataname == "frac20"), aes(x = dataname, y = mean_imv, fill = method)) +
-  geom_bar(stat = "identity", width = 0.5, position = position_dodge(width = 0.5)) +  # Adjust dodge width for alignment
-  geom_errorbar(data = df_error %>% filter(dataname == "frac20"), 
-                aes(ymin = mean_imv - sd, ymax = mean_imv + sd, x = dataname),
-                width = 0.25, 
-                position = position_dodge(width = 0.5)) +  # Align error bars with bars
-  labs(x = "Dataset", y = "IMV(2PL, CDM)", title = "Comparision of in-sample data vs out-of-sample fold") +
-  theme_minimal() +
-  facet_grid(estimate_method ~ cdm_model) +
-   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "bottom"  # Move legend to bottom
-  ) + ylim(-0.2, 0.05)
-
-ggplot(df_long %>% filter(dataname == "frac20", method != "mean_imv_kfold"), aes(x = dataname, y = mean_imv, fill = method)) +
-  geom_bar(stat = "identity", width = 0.25, position = position_dodge(width = 0.25)) +  # Adjust dodge width for alignment
-  
-  labs(x = "Dataset", y = "IMV(2PL, CDM)", title = "in-sample data prediction") +
-  theme_minimal() +
-  facet_grid(estimate_method ~ cdm_model) +
-   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "bottom"  # Move legend to bottom
-  ) + ylim(-0.05, 0.05)
+# ggplot(df_long %>% filter(dataname == "frac20"), aes(x = dataname, y = mean_imv, fill = method)) +
+#   geom_bar(stat = "identity", width = 0.5, position = position_dodge(width = 0.5)) +  # Adjust dodge width for alignment
+#   geom_errorbar(data = df_error %>% filter(dataname == "frac20"), 
+#                 aes(ymin = mean_imv - sd, ymax = mean_imv + sd, x = dataname),
+#                 width = 0.25, 
+#                 position = position_dodge(width = 0.5)) +  # Align error bars with bars
+#   labs(x = "Dataset", y = "IMV(2PL, CDM)", title = "Comparision of in-sample data vs out-of-sample fold") +
+#   theme_minimal() +
+#   facet_grid(estimate_method ~ cdm_model) +
+#    theme(
+#     axis.text.x = element_text(angle = 45, hjust = 1),
+#     legend.position = "bottom"  # Move legend to bottom
+#   ) + ylim(-0.2, 0.05)
+# 
+# ggplot(df_long %>% filter(dataname == "frac20", method != "mean_imv_kfold"), aes(x = dataname, y = mean_imv, fill = method)) +
+#   geom_bar(stat = "identity", width = 0.25, position = position_dodge(width = 0.25)) +  # Adjust dodge width for alignment
+#   
+#   labs(x = "Dataset", y = "IMV(2PL, CDM)", title = "in-sample data prediction") +
+#   theme_minimal() +
+#   facet_grid(estimate_method ~ cdm_model) +
+#    theme(
+#     axis.text.x = element_text(angle = 45, hjust = 1),
+#     legend.position = "bottom"  # Move legend to bottom
+#   ) + ylim(-0.05, 0.05)
 ```
 
 ## Check properties of ED
@@ -595,7 +626,6 @@ table_latex <- kable(empirical_data_descp, format = "latex", caption = "IRW empi
 cat(table_latex)
 ```
 
-
 ### check the structure of Qmatrix
 ```{r}
 obj_name = "cdm_ecpe"
@@ -639,22 +669,18 @@ ggraph(g, layout = "fr") +  # "fr" = Force-directed layout
   geom_node_text(aes(label = name), vjust = 1.5, size = 4) +  # Label nodes
   theme_void()  # Clean theme
 ```
-```
 
 ## LaTeX table
 ```{r}
 library(kableExtra)
 ```
+
 ```{r}
 # Generate LaTeX Table with Styling
 table_latex <- kable(df.imv.compare.combined, format = "latex", caption = "IMV(2PL, CDM) from IRW empirical datasets") %>%
   kable_styling(latex_options = c("hold_position"))
 
-# Print LaTeX Code
-cat(table_latex)
-```
 
-```{r}
 # Sort data by dataname and round numeric columns to 4 decimals
 df_sorted <- df.imv.compare.combined %>%
   arrange(dataname) %>%
