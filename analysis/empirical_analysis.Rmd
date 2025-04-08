@@ -436,6 +436,9 @@ q_data2 <- list(
   frac11q5 = convert.fraction.data(data.fraction2$data, data.fraction2$q.matrix2)
 )
 ```
+
+
+
 ```{r}
 empirical_q_data <- append(q_data, q_data2)
 ```
@@ -551,9 +554,32 @@ ggplot(df_long_modified , aes(x = dataname, y = mean_imv, fill = Method)) +
    theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
     legend.position = "bottom"  # Move legend to bottom
-  ) + scale_x_discrete(expand = expansion(mult = c(0.1, 0.1)))
+  ) + scale_x_discrete(expand = expansion(mult = c(0.1, 0.1))) +
+geom_hline(yintercept = 0, linetype = "solid", color = "darkgrey") 
 
 ggsave("plots/empirical_analysis.pdf", width = 6, height = 4)
+```
+```{r}
+ggplot(df_long_modified, aes(x = dataname, y = mean_imv, fill = Method)) +
+  geom_bar(stat = "identity", width = 0.8, position = position_dodge(width = 0.8)) +
+  geom_errorbar(
+    data = df_error,
+    aes(ymin = mean_imv - sd, ymax = mean_imv + sd, x = dataname),
+    width = 0.5,
+    position = position_dodge(width = 0.8)
+  ) +
+  geom_hline(yintercept = 0, linetype = "solid", size = 0.5, color = "black") +  # Emphasized y = 0 line
+ facet_grid(. ~ estimate_method + cdm_model, scales = "fixed") +
+  labs(x = "Dataset", y = "IMV(2PL, CDM)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom",
+    panel.spacing = unit(1.5, "lines")  # Wider space between panels
+  ) +
+  scale_x_discrete(expand = expansion(mult = c(0.1, 0.1)))
+
+ggsave("plots/empirical_analysis_2.pdf", width = 10, height = 6)
 ```
 
 
