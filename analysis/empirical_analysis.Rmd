@@ -567,9 +567,10 @@ ggplot(df_long_modified, aes(x = dataname, y = mean_imv, fill = Method)) +
     aes(ymin = mean_imv - sd, ymax = mean_imv + sd, x = dataname),
     width = 0.5,
     position = position_dodge(width = 0.8)
-  ) +
+  ) + 
   geom_hline(yintercept = 0, linetype = "solid", size = 0.5, color = "black") +  # Emphasized y = 0 line
- facet_grid(. ~ estimate_method + cdm_model, scales = "fixed") +
+   facet_grid(estimate_method ~ cdm_model ) +
+ #facet_grid(. ~ estimate_method + cdm_model, scales = "fixed") +
   labs(x = "Dataset", y = "IMV(2PL, CDM)") +
   theme_minimal() +
   theme(
@@ -577,9 +578,9 @@ ggplot(df_long_modified, aes(x = dataname, y = mean_imv, fill = Method)) +
     legend.position = "bottom",
     panel.spacing = unit(1.5, "lines")  # Wider space between panels
   ) +
-  scale_x_discrete(expand = expansion(mult = c(0.1, 0.1)))
+  scale_x_discrete(expand = expansion(mult = c(0.1, 0.1))) + coord_cartesian(ylim = c(-0.1, 0.1))
 
-ggsave("plots/empirical_analysis_2.pdf", width = 10, height = 6)
+ggsave("plots/empirical_analysis_2.pdf", width = 8, height = 8)
 ```
 
 
