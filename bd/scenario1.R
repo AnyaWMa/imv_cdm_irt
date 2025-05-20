@@ -129,12 +129,14 @@ simulate_scenario_1 <- function(modeltype = "GDINA", estmethod = "mp") {
 
 ## Simulate GDINA
 result_gdina_1 <- simulate_scenario_1(modeltype = "GDINA", estmethod = "mp")
-save(result_gdina_1 , file = "../simulation_data/scenario1_out_gdina_offset15_ps035_mp.RData")
+#save(result_gdina_1 , file = "../simulation_data/scenario1_out_gdina_offset15_ps035_mp.RData")
 
 ## Simulate GDINA
 result_dina_1 <- simulate_scenario_1(modeltype = "DINA", estmethod = "mp")
-save(result_dina_1 , file = "../simulation_data/scenario1_out_dina_offset15_ps035_mp.RData")
+#save(result_dina_1 , file = "../simulation_data/scenario1_out_dina_offset15_ps035_mp.RData")
 #save(out2 , file = "../simulation_data/out_dina_offset15_ps035.RData")
+load("../simulation_data/scenario1_out_dina_offset15_ps035_mp.RData")
+
 
 simulate_scenario_2 <- function() {
   # Generate sorted vector a
@@ -228,6 +230,7 @@ plot_rmse_imv_panels <- function(a, out2) {
            legend = c("(IRT,CDM)", "(IRT,True)", "(CDM,True)"))
   }
 }
+
 pdf("../plots/simulation1_gdina_mp.pdf", width = 6, height = 8)
 plot_rmse_imv_panels(result_gdina_1$a, result_gdina_1$out2)
 if (!is.null(file)) dev.off()
@@ -287,4 +290,120 @@ if (!is.null(file)) dev.off()
 ##dev.off()
 
 ##legend("topright",bty='n',lwd=1,lty=c(1,2),title=expression(delta),legend=c(0,1.5))
-##dev.off()
+dev.off()
+
+
+plot_rmse_imv_panels_modify <- function(a, out2) {
+  par(mgp = c(2, 1, 0), mfrow = c(3, 2), mar = c(3, 3, 2, 1), oma = rep(0.5, 4))
+  
+  panel_titles <- c("RMSE (High item quality)", "IMV (High item quality)", 
+                    "RMSE (Medium item quality)", "IMV (Medium item quality)", 
+                    "RMSE (Low item quality)", "IMV (Low item quality)")
+  
+  pf <- function(x, y, ...) {
+    m <- loess(y ~ x)
+    lines(x, predict(m), ..., lwd = 2)
+  }
+  
+  for (i in seq_along(out2)) {
+    
+    ## RMSE Plot
+    plot(NULL, xlim = c(0, 3), ylim = c(0, 0.6), 
+         xlab = 'a', ylab = 'RMSE(oos resp, est)')
+    title(panel_titles[2 * i - 1], line = 0.5, cex.main = 1)
+    mtext(paste0("(", letters[2 * i - 1], ")"), side = 3, adj = 0, cex = 1)
+    
+    f_rmse <- function(out, ...) {
+      z <- do.call("rbind", out)
+      irt <- z[, 4]
+      cdm <- z[, 5]
+      irt.p <- z[, 6]
+      cdm.p <- z[, 7]
+      pf(a, irt.p, col = 'blue', lty = 2, ...)
+      pf(a, cdm.p, col = 'red', lty = 2, ...)
+    }
+    
+    f_rmse(out2[[i]])
+    
+    legend("topright", bty = 'n', lty = c(1, 1, 2, 2),
+           col = c("blue", "red", "blue", "red"), cex = 1,
+           legend = c("(True,IRT)", "(True,CDM)"))
+    
+    ## IMV Plot
+    plot(NULL, xlim = c(0, 3), ylim = c(-0.05, 0.2),
+         xlab = 'a', ylab = 'IMV')
+    title(panel_titles[2 * i], line = 0.5, cex.main = 1)
+    mtext(paste0("(", letters[2 * i], ")"), side = 3, adj = 0, cex = 1)
+    
+    f_imv <- function(out, ...) {
+      om <- do.call("rbind", out)
+      abline(h = 0)
+      pf(a, om[, 2], col = 'blue', lty = 2, ...)
+      pf(a, om[, 3], col = 'red', lty = 2, ...)
+    }
+    
+    f_imv(out2[[i]])
+    
+    legend("topright", bty = 'n', lty = c(1, 2, 2),
+           col = c("black", "blue", "red"), cex = 1,
+           legend = c("(IRT,True)", "(CDM,True)"))
+  }
+}
+
+plot_rmse_imv_panels_modify(result_dina_1$a, result_dina_1$out2)
+pdf("hi.pdf", width = 6, height = 6)
+
+plot_rmse_imv_panels_modify2 <- function(a, out2) {
+  par(mgp = c(2, 1, 0), mfrow = c(3, 2), mar = c(3, 3, 2, 1), oma = rep(0.5, 4))
+  
+  panel_titles <- c("RMSE (High item quality)", "IMV (High item quality)", 
+                    "RMSE (Medium item quality)", "IMV (Medium item quality)", 
+                    "RMSE (Low item quality)", "IMV (Low item quality)")
+  
+  pf <- function(x, y, ...) {
+    m <- loess(y ~ x)
+    lines(x, predict(m), ..., lwd = 2)
+  }
+  
+  for (i in seq_along(out2)) {
+    
+    ## RMSE Plot
+    plot(NULL, xlim = c(0, 3), ylim = c(0, 0.6), 
+         xlab = 'a', ylab = 'RMSE(oos resp, est)')
+    title(panel_titles[2 * i - 1], line = 0.5, cex.main = 1)
+    mtext(paste0("(", letters[2 * i - 1], ")"), side = 3, adj = 0, cex = 1)
+    
+    f_rmse <- function(out, ...) {
+      z <- do.call("rbind", out)
+      irt <- z[, 4]
+      cdm <- z[, 5]
+      irt.p <- z[, 6]
+      cdm.p <- z[, 7]
+    }
+    
+    f_rmse(out2[[i]])
+    
+    legend("topright", bty = 'n', lty = c(1, 1, 2, 2),
+           col = c("blue", "red", "blue", "red"), cex = 1,
+           legend = c("(True,IRT)", "(True,CDM)"))
+    
+    ## IMV Plot
+    plot(NULL, xlim = c(0, 3), ylim = c(-0.05, 0.2),
+         xlab = 'a', ylab = 'IMV')
+    title(panel_titles[2 * i], line = 0.5, cex.main = 1)
+    mtext(paste0("(", letters[2 * i], ")"), side = 3, adj = 0, cex = 1)
+    
+    f_imv <- function(out, ...) {
+      om <- do.call("rbind", out)
+      abline(h = 0)
+    }
+    
+    f_imv(out2[[i]])
+    
+    legend("topright", bty = 'n', lty = c(1, 2, 2),
+           col = c("black", "blue", "red"), cex = 1,
+           legend = c("(IRT,True)", "(CDM,True)"))
+  }
+}
+plot_rmse_imv_panels(result_dina_1$a, result_dina_1$out2)
+plot_rmse_imv_panels_modify2(result_dina_1$a, result_dina_1$out2)
