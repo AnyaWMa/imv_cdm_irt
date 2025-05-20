@@ -113,7 +113,25 @@ co <- coef(m, IRTpars = TRUE, simplify = TRUE)$items
 theta
 ```
 
+# Presentation Prep
 ```{r}
+N <- 500
+nsk <- 6
+sk.offset=0
+a = 3
+```
 
+```{r}
+th<-rnorm(N)
+sk<-runif(nsk)
+p<-a*(outer(th,sk-mean(sk),'-'))
+p<-p+sk.offset ##controlling prevalence of skills
+p<-apply(p,2,function(x) 1/(1+exp(-(x))))
+sk<-apply(p,2,function(x) rbinom(nrow(p),1,p))
+```
+
+```{r}
+cor_matrix <- cor(sk)
+print(cor_matrix)
 ```
 
