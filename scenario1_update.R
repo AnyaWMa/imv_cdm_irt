@@ -291,3 +291,107 @@ pdf("plots_update/simulation1_dina_gdina_mp_MAP.pdf", width = 6, height = 6)
 plot_imv_only_panels(result_dina_1, result_gdina_1)
 if (!is.null(file)) dev.off()
 
+
+
+
+# Simulation 2
+cdm.sim.2<-function(a, N=500, modeltype = "DINA", attribute = "mvnorm") {
+  Q <- sim30GDINA$simQ
+  J <- nrow(Q)
+  K <- ncol(Q)
+  
+  # set item difficulty
+  gs <- matrix(runif(J*2,0,0.3),J,2)
+  cutoffs <- qnorm(c(1:K)/(K+1))
+  m <- rep(0,K)
+  
+  vcov <- matrix(a,K,K)
+  diag(vcov) <- 1
+  
+  if (attribute == "mvnorm") {
+    sim <- simGDINA(N,Q,gs.parm = gs, model = modeltype, att.dist = "mvnorm", mvnorm.parm=list(mean = m, sigma = vcov,cutoffs = cutoffs))
+  } else if (attribute == "higher.order"){
+    theta <- rnorm(N)
+    lambda <- data.frame(a=rep(1,K),b=seq(-2,2,length.out=K))
+    sim <- simGDINA(N,Q,gs.parm = gs, model = modeltype, att.dist = "higher.order",  higher.order.parm = list(theta = theta,lambda = lambda))
+  } else {
+    diverg <- list(c(1,2),
+                   c(2,3),
+                   c(1,4),
+                   c(4,5))
+    struc <- att.structure(diverg,K)
+    sim <- simGDINA(N,Q,gs.parm = gs, model = modeltype, att.dist = "categorical",att.prior = struc$att.prob))
+  }
+  
+  # test data - same p for each cell
+  sim.test <- simGDINA(N,Q, model = modeltype, catprob.parm = sim$catprob.parm,attribute = sim$attribute)
+  
+  #prediction from true cdm
+  truep <- sim$LCprob.parm[sim$att.group,]
+  
+  irtfit<-mirt(data.frame(sim$dat),1,'2PL')
+  
+  # predictions from irt
+  th.est<-fscores(irtfit)
+  est<-coef(irtfit,simplify=TRUE,IRTpars=TRUE)$items
+  k<-outer(th.est[,1],est[,2],'-')
+  k<-matrix(est[,1],nrow=N,ncol=J,byrow=TRUE)*k
+  irtp<-1/(1+exp(-k))
+  
+  cdmp <- cdm.pr.marg.update(sim$dat,Q,modeltype,estmethod = "MAP")
+  
+  pmp <- cdm.pr.marg.update(sim$dat,Q,modeltype,estmethod = "mp")
+  
+  om<-imv::imv.binary(as.numeric(sim.test$dat),as.numeric(irtp),as.numeric(cdmp))
+  om.mp <- imv::imv.binary(as.numeric(sim.test$dat),as.numeric(irtp),as.numeric(pmp))
+  oracle.irt<-imv::imv.binary(as.numeric(sim.test$dat),as.numeric(irtp),as.numeric(truep))
+  oracle.cdm<-imv::imv.binary(as.numeric(sim.test$dat),as.numeric(cdmp),as.numeric(truep))
+  oracle.cdm.mp<-imv::imv.binary(as.numeric(sim.test$dat),as.numeric(pmp),as.numeric(truep))
+  
+  rms<-function(x) sqrt(mean(x^2))
+  rms.irt<-rms(as.numeric(sim.test$dat)-as.numeric(irtp))
+  rms.cdm<-rms(as.numeric(sim.test$dat)-as.numeric(cdmp))
+  rms.cdm.mp <- rms(as.numeric(sim.test$dat)-as.numeric(pmp))
+  rms.irt.p<-rms(as.numeric(truep)-as.numeric(irtp))
+  rms.cdm.p<-rms(as.numeric(truep)-as.numeric(cdmp))
+  rms.cdm.mp.p<-rms(as.numeric(truep)-as.numeric(pmp))
+  
+  c(om=om,
+    oracle.irt=oracle.irt,
+    oracle.cdm=oracle.cdm,
+    rms.irt=rms.irt,
+    rms.cdm=rms.cdm,
+    rms.irt.p=rms.irt.p,
+    rms.cdm.p=rms.cdm.p, 
+    om.mp = om.mp, 
+    oracle.cdm.mp = oracle.cdm.mp, 
+    rms.cdm.mp = rms.cdm.mp,
+    rms.cdm.mp.p = rms.cdm.mp.p
+  )
+}
+
+simulate_scenario_2_attribute <- function(modeltype = "GDINA") {
+  # Generate sorted vector a
+  a <- sort(runif(n = 100, min = 0, max = 0.8))
+  
+  # Initialize output list
+  out2 <- list()
+  
+  # Loop over bounds and apply cdm.sim in parallel
+  types <- c("mvnorm", "higher.order", "categorical")
+  for (i in c(1, 2, 3)) {
+    print(i)
+    out2[[as.character(i)]] <- mclapply(
+      a,
+      cdm.sim.2,
+      N = 500,
+      modeltype = modeltype,
+      attribute = types[[i]]
+    )
+  }
+  
+  # Return both a and out2
+  return(list(a = a, out2 = out2))
+}
+
+

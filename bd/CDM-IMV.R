@@ -106,4 +106,34 @@ for(i in 1:4){
 imv.vec
 
 
+gs <- matrix(runif(J*2,0,0.3),J,2)
+cutoffs <- qnorm(c(1:K)/(K+1))
+m <- rep(0,K)
+
+vcov <- matrix(rr[i],K,K)
+diag(vcov) <- 1
+sim <- simGDINA(N,Q,gs.parm = gs, att.dist = "mvnorm",
+                mvnorm.parm=list(mean = m, sigma = vcov,cutoffs = cutoffs))
+# test data - same p for each cell
+sim.test <- simGDINA(N,Q,catprob.parm = sim$catprob.parm,attribute = sim$attribute)
+cdmfit <- GDINA(sim$dat,Q,mono.constraint = TRUE)
+
+irtfit<-mirt(data.frame(sim$dat),1,'2PL')
+
+# predictions from irt
+
+th.est<-fscores(irtfit)
+est<-coef(irtfit,simplify=TRUE,IRTpars=TRUE)$items
+k<-outer(th.est[,1],est[,2],'-')
+k<-matrix(est[,1],nrow=N,ncol=J,byrow=TRUE)*k
+irtp<-1/(1+exp(-k))
+
+#prediction from cdm based on MAP
+gr <- GDINA:::matchMatrix(as.matrix(attributepattern(K)),as.matrix(personparm(cdmfit,"MAP")[,1:K]))
+cdmp <- t(cdmfit$LC.prob[,gr])
+c1 <- as.numeric(cdmp)
+cdmp.update <- cdm.pr.marg.update(sim$dat,Q,modeltype="GDINA",estmethod = "MAP")
+c2 <- as.numeric(cdmp.update)
+library(tibble)
+hi <- tibble(hi = c1, hi2 = c2)
 
