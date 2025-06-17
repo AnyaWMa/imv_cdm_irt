@@ -122,7 +122,7 @@ plot_rmse_imv_panels <- function(a, out2) {
     
     ## RMSE Plot
     plot(NULL, xlim = c(0, 0.8), ylim = c(0, 0.6), 
-         xlab = 'a', ylab = 'RMSE(oos resp, est)')
+         xlab = expression(rho), ylab = 'RMSE(oos resp, est)')
     title(panel_titles[2 * i - 1], line = 0.5, cex.main = 1)
     #mtext(paste0("(", letters[2 * i - 1], ")"), side = 3, adj = 0, cex = 1)
     
@@ -146,7 +146,7 @@ plot_rmse_imv_panels <- function(a, out2) {
     
     ## IMV Plot
     plot(NULL, xlim = c(0, 0.8), ylim = c(-0.05, 0.2),
-         xlab = 'a', ylab = 'IMV')
+         xlab = expression(rho), ylab = 'IMV')
     title(panel_titles[2 * i], line = 0.5, cex.main = 1)
     #mtext(paste0("(", letters[2 * i], ")"), side = 3, adj = 0, cex = 1)
     
@@ -190,7 +190,7 @@ plot_rmse_imv_panels_mp <- function(a, out2) {
     
     ## RMSE Plot
     plot(NULL, xlim = c(0, 0.8), ylim = c(0, 0.6), 
-         xlab = 'a', ylab = 'RMSE(oos resp, est)')
+         xlab = expression(rho), ylab = 'RMSE(oos resp, est)')
     title(panel_titles[2 * i - 1], line = 0.5, cex.main = 1)
     #mtext(paste0("(", letters[2 * i - 1], ")"), side = 3, adj = 0, cex = 1)
     
@@ -214,7 +214,7 @@ plot_rmse_imv_panels_mp <- function(a, out2) {
     
     ## IMV Plot
     plot(NULL, xlim = c(0, 0.8), ylim = c(-0.05, 0.2),
-         xlab = 'a', ylab = 'IMV')
+         xlab = expression(rho), ylab = 'IMV')
     title(panel_titles[2 * i], line = 0.5, cex.main = 1)
     #mtext(paste0("(", letters[2 * i], ")"), side = 3, adj = 0, cex = 1)
     
@@ -273,7 +273,7 @@ plot_imv_only_panels <- function(result_dina, result_gdina) {
     cols <- config$cols
     
     plot(NULL, xlim = c(0, 0.8), ylim = c(-0.05, 0.2),
-         xlab = "a", ylab = "IMV", main = panel_titles[i], cex.main = 1)
+         xlab = expression(rho), ylab = "IMV", main = panel_titles[i], cex.main = 1)
   #  mtext(paste0("(", letters[i], ")"), side = 3, adj = 0, cex = 1)
     abline(h = 0)
     

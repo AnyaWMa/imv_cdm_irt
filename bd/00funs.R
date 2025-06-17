@@ -213,6 +213,10 @@ cdm.pr.marg2<-function(resp,qm,modeltype="GDINA") { #really only works with GDIN
 cdm.pr.marg.update<-function(resp,qm,modeltype="DINA",estmethod = "mp") { 
   library(GDINA)
   m <- GDINA(resp,qm,modeltype, mono.constr = TRUE)
+  if (!extract(m, "convergence")) {
+    print("CDM non-converge")
+    return(FALSE)
+  } 
   map <- personparm(m, what = estmethod)[,1:ncol(qm), drop = FALSE]
   co<-coef(m) #gs<-coef(m,what='gs')
   p<-list()
