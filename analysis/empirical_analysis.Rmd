@@ -76,6 +76,7 @@ q_data<-dataset_tables[test]
 print(length(q_data))
 ```
 
+
 # helper functions 
 ## IRT
 ```{r}
@@ -248,62 +249,9 @@ func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", i
 
 # Empirical analysis
 
-## sanity check 
-
-### Q1: check if q_matrix is correct?
-
-get from irw
-```{r}
-df_frac20 <- q_data$frac20$to_data_frame()
-
-df_frac20_clean <- df_frac20 %>% mutate(item = as.integer(substring(item, 6)))
-
-df_frac20_cdm_structure <- func.convert.Q.data.structure.with.k.fold(df_frac20_clean, 0)
-```
-
-get from gdina
-```{r}
-df_frac20_cdm_structure_gdina <- GDINA::frac20
-```
-
-```{r}
-all(df_frac20_cdm_structure$Q == df_frac20_cdm_structure_gdina$Q)
-```
 
 
-### Q2: check if frac20 cdm prediction makes sense?
-
-```{r}
-df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "GDINA", "2PL", FALSE, 5, cdm.pr.marg.update, "mp")
-```
-```{r}
-df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "GDINA", "2PL", TRUE, 5, cdm.pr.marg.update)
-```
-
-### Q3: check identifiability of all data 
-```{r}
-
-for (obj_name in names(q_data)) {
-    if (!substring(obj_name, 1, 9) %in% c("cdm_timss", "cdm_pisa0", "hmcdm_spa", "cdm_hr")) {
-      print(obj_name)
-      df <- q_data[[obj_name]]$to_data_frame() 
-      structure <- func.convert.Q.data.structure.with.k.fold(df, 0)
-      print(check.qm.omplete(structure$Q))
-    }
-}
-
-for (obj_name in names(q_data2)) {
-    if (!substring(obj_name, 1, 9) %in% c("cdm_timss", "cdm_pisa0", "hmcdm_spa", "cdm_hr")) {
-      print(obj_name)
-      df <- q_data2[[obj_name]]
-      structure <- func.convert.Q.data.structure.with.k.fold(df, 0)
-      print(check.qm.omplete(structure$Q))
-    }
-}
-  
-```
-
-## Run all data
+## Organize all data
 
 ```{r}
 func.run.empirical.data <- function(q_data, cdm_model = "DINA", irt_model = "2PL", cdm_pr_estimate = cdm.pr.marg.update, estmethod = "mp") {
@@ -403,12 +351,22 @@ timss2011_ready <- timss_data_with_id %>%
   
 ```
 
+
 mental health data
 ```{r}
 load("data/CDM_AlcoholApplication_Data_IRW.RData")
 
 mental_health_ready <- df %>% 
   rename(resp = "response", V1 = "Qmatrix_skill1", V2 = "Qmatrix_skill2", V3 = "Qmatrix_skill3", V4 = "Qmatrix_skill4")
+```
+
+roar pa data
+```{r}
+load("data/ROAR_PA.RData")
+
+roar_pa_ready <- df %>% 
+  dplyr ::select(-rt) %>% 
+  mutate(id = as.character(id))
 ```
 
 
@@ -431,6 +389,7 @@ convert.fraction.data <- function(dat, Q) {
 q_data2 <- list(
   timss_2011 = timss2011_ready, 
   mental_health = mental_health_ready,
+  roar_pa = roar_pa_ready,
   frac15q5 = convert.fraction.data(data.fraction1$data, data.fraction1$q.matrix),
   frac11q3 = convert.fraction.data(data.fraction2$data, data.fraction2$q.matrix1),
   frac11q5 = convert.fraction.data(data.fraction2$data, data.fraction2$q.matrix2)
@@ -443,6 +402,76 @@ q_data2 <- list(
 empirical_q_data <- append(q_data, q_data2)
 ```
 
+
+## sanity check 
+
+### Q1: check if q_matrix is correct?
+
+get from irw
+```{r}
+df_frac20 <- q_data$frac20$to_data_frame()
+
+df_frac20_clean <- df_frac20 %>% mutate(item = as.integer(substring(item, 6)))
+
+df_frac20_cdm_structure <- func.convert.Q.data.structure.with.k.fold(df_frac20_clean, 0)
+```
+
+get from gdina
+```{r}
+df_frac20_cdm_structure_gdina <- GDINA::frac20
+```
+
+```{r}
+all(df_frac20_cdm_structure$Q == df_frac20_cdm_structure_gdina$Q)
+```
+
+
+### Q2: check if frac20 cdm prediction makes sense?
+
+```{r}
+func.run.analysis.kfold(timss2011_ready, "GDINA", "2PL", FALSE, 5, cdm.pr.marg.update, "mp")
+```
+```{r}
+func.run.analysis.kfold(roar_pa_ready, "GDINA", "2PL", TRUE, 5, cdm.pr.marg.update, "mp")
+```
+
+```{r}
+df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "GDINA", "2PL", FALSE, 5, cdm.pr.marg.update, "mp")
+```
+```{r}
+df_frac20_analysis <- func.run.analysis.kfold(df_frac20, "GDINA", "2PL", TRUE, 5, cdm.pr.marg.update)
+```
+
+### Q3: check identifiability of all data 
+```{r}
+
+for (obj_name in names(q_data)) {
+    if (!substring(obj_name, 1, 9) %in% c("cdm_timss", "cdm_pisa0", "hmcdm_spa", "cdm_hr")) {
+      print(obj_name)
+      df <- q_data[[obj_name]]$to_data_frame() 
+      structure <- func.convert.Q.data.structure.with.k.fold(df, 0)
+      print(check.qm.omplete(structure$Q))
+    }
+}
+
+for (obj_name in names(q_data2)) {
+    if (!substring(obj_name, 1, 9) %in% c("cdm_timss", "cdm_pisa0", "hmcdm_spa", "cdm_hr")) {
+      print(obj_name)
+      df <- q_data2[[obj_name]]
+      structure <- func.convert.Q.data.structure.with.k.fold(df, 0)
+      print(check.qm.omplete(structure$Q))
+    }
+}
+  
+```
+
+```{r}
+roar_pa_ready %>% 
+  group_by(item) %>% 
+  tally()
+```
+
+## Run all data
 ```{r}
 set.seed(10)
 df.imv.compare.1.mp <- func.run.empirical.data(empirical_q_data, cdm_model = "DINA", irt_model = "2PL")
@@ -470,6 +499,9 @@ df.imv.compare.combined <- df.imv.compare.1.mp %>%
   add_column(estimate_method = "MAP")) %>% 
   arrange(dataname, cdm_model, estimate_method) %>% 
   relocate(dataname, cdm_model, estimate_method)
+```
+```{r}
+df.imv.compare.combined
 ```
 
 
@@ -541,24 +573,7 @@ df_error <- df_long_modified %>%
   mutate(sd = ifelse(Method == "out-of-sample fold", df.imv.compare.combined$sd_imv_kfold, 0))
 ```
 
-```{r}
-ggplot(df_long_modified , aes(x = dataname, y = mean_imv, fill = Method)) +
-  geom_bar(stat = "identity", width = 0.8, position = position_dodge(width = 0.8)) +  # Adjust dodge width for alignment
-  geom_errorbar(data = df_error, 
-                aes(ymin = mean_imv - sd, ymax = mean_imv + sd, x = dataname),
-                width = 0.5, 
-                position = position_dodge(width = 0.8)) +  # Align error bars with bars
-  labs(x = "Dataset", y = "IMV(2PL, CDM)") +
-  theme_minimal() +
-  facet_grid(estimate_method ~ cdm_model , scales = "free") +
-   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "bottom"  # Move legend to bottom
-  ) + scale_x_discrete(expand = expansion(mult = c(0.1, 0.1))) +
-geom_hline(yintercept = 0, linetype = "solid", color = "darkgrey") 
 
-ggsave("plots/empirical_analysis.pdf", width = 6, height = 4)
-```
 ```{r}
 df_error_update <- df_error %>% 
   mutate(sd = ifelse(Method == "in-sample", NA, sd))
@@ -583,12 +598,12 @@ ggplot(df_long_modified, aes(x = dataname, y = mean_imv, fill = Method)) +
     axis.title = element_text(s = 15),
     legend.title = element_text(s = 10),
     axis.text = element_text(s = 10),
-    strip.text = element_text(s = 20),
+    strip.text = element_text(s = 15),
     legend.text = element_text(s = 10),
   ) +
-  scale_x_discrete(expand = expansion(mult = c(0.1, 0.1))) + coord_cartesian(ylim = c(-0.1, 0.1))
+  scale_x_discrete(expand = expansion(mult = c(0.1, 0.1))) + coord_cartesian(ylim = c(-0.05, 0.05))
 
-ggsave("plots/empirical_analysis_2.pdf", width = 8, height = 8)
+ggsave("plots/empirical_analysis_2.pdf", width = 8, height = 6)
 ```
 ```{r}
 df_error_update <- df_error %>% 

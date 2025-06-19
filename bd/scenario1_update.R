@@ -1,6 +1,6 @@
 remotes::install_github("hansorlee/irwpkg")
 o
-source("00funs.R") ##https://github.com/AnyaWMa/IRW-Qmatrix/blob/main/bd/00funs.R
+source("bd/00funs.R") ##https://github.com/AnyaWMa/IRW-Qmatrix/blob/main/bd/00funs.R
 library(GDINA)
 library(parallel)
 ################################3
@@ -11,6 +11,8 @@ J <- nrow(Q)
 K <- ncol(Q)
 
 cdm.sim<-function(a, N=500, modeltype = "DINA") {
+  
+  warning <- c(Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf)
   Q <- sim30GDINA$simQ
   J <- nrow(Q)
   K <- ncol(Q)
@@ -34,6 +36,11 @@ cdm.sim<-function(a, N=500, modeltype = "DINA") {
   
   irtfit<-mirt(data.frame(sim$dat),1,'2PL')
   
+  if (!extract.mirt(irtfit , 'converged')) {
+    print("irt not converged")
+    return (warning)
+  }
+  
   # predictions from irt
   th.est<-fscores(irtfit)
   est<-coef(irtfit,simplify=TRUE,IRTpars=TRUE)$items
@@ -43,7 +50,14 @@ cdm.sim<-function(a, N=500, modeltype = "DINA") {
   
   cdmp <- cdm.pr.marg.update(sim$dat,Q,modeltype,estmethod = "MAP")
   
+  if (length(cdmp)==1) {
+    return (warning)
+  }
+  
   pmp <- cdm.pr.marg.update(sim$dat,Q,modeltype,estmethod = "mp")
+  if (length(pmp)==1) {
+    return (warning)
+  }
   
   om<-imv::imv.binary(as.numeric(sim.test$dat),as.numeric(irtp),as.numeric(cdmp))
   om.mp <- imv::imv.binary(as.numeric(sim.test$dat),as.numeric(irtp),as.numeric(pmp))
@@ -65,9 +79,9 @@ cdm.sim<-function(a, N=500, modeltype = "DINA") {
     rms.irt=rms.irt,
     rms.cdm=rms.cdm,
     rms.irt.p=rms.irt.p,
-    rms.cdm.p=rms.cdm.p, 
-    om.mp = om.mp, 
-    oracle.cdm.mp = oracle.cdm.mp, 
+    rms.cdm.p=rms.cdm.p,
+    om.mp = om.mp,
+    oracle.cdm.mp = oracle.cdm.mp,
     rms.cdm.mp = rms.cdm.mp,
     rms.cdm.mp.p = rms.cdm.mp.p
     )
@@ -168,6 +182,10 @@ plot_rmse_imv_panels <- function(a, out2) {
 pdf("plots_update/simulation1_gdina_map.pdf", width = 6, height = 8)
 plot_rmse_imv_panels(result_gdina_1$a, result_gdina_1$out2)
 if (!is.null(file)) dev.off()
+
+if (exists("result_dina_1") && is.null(result_dina_1)) {
+  rm(result_dina_1)
+}
 
 pdf("plots_update/simulation1_dina_map.pdf", width = 6, height = 8)
 plot_rmse_imv_panels(result_dina_1$a, result_dina_1$out2)
@@ -291,3 +309,4 @@ pdf("plots_update/simulation1_dina_gdina_mp_MAP.pdf", width = 6, height = 6)
 plot_imv_only_panels(result_dina_1, result_gdina_1)
 if (!is.null(file)) dev.off()
 
+###### New
