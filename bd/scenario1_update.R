@@ -1,5 +1,5 @@
-remotes::install_github("hansorlee/irwpkg")
-o
+#remotes::install_github("hansorlee/irwpkg")
+
 source("bd/00funs.R") ##https://github.com/AnyaWMa/IRW-Qmatrix/blob/main/bd/00funs.R
 library(GDINA)
 library(parallel)
@@ -12,7 +12,8 @@ K <- ncol(Q)
 
 cdm.sim<-function(a, N=500, modeltype = "DINA") {
   
-  warning <- c(Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf)
+  warning1 <- c(Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf)
+  warning2 <- c(-Inf, -Inf, -Inf, -Inf, -Inf, -Inf, -Inf, -Inf, -Inf, -Inf,-Inf, -Inf)
   Q <- sim30GDINA$simQ
   J <- nrow(Q)
   K <- ncol(Q)
@@ -38,7 +39,7 @@ cdm.sim<-function(a, N=500, modeltype = "DINA") {
   
   if (!extract.mirt(irtfit , 'converged')) {
     print("irt not converged")
-    return (warning)
+    return (warning1)
   }
   
   # predictions from irt
@@ -51,12 +52,12 @@ cdm.sim<-function(a, N=500, modeltype = "DINA") {
   cdmp <- cdm.pr.marg.update(sim$dat,Q,modeltype,estmethod = "MAP")
   
   if (length(cdmp)==1) {
-    return (warning)
+    return (warning2)
   }
   
   pmp <- cdm.pr.marg.update(sim$dat,Q,modeltype,estmethod = "mp")
   if (length(pmp)==1) {
-    return (warning)
+    return (warning2)
   }
   
   om<-imv::imv.binary(as.numeric(sim.test$dat),as.numeric(irtp),as.numeric(cdmp))
@@ -64,6 +65,7 @@ cdm.sim<-function(a, N=500, modeltype = "DINA") {
   oracle.irt<-imv::imv.binary(as.numeric(sim.test$dat),as.numeric(irtp),as.numeric(truep))
   oracle.cdm<-imv::imv.binary(as.numeric(sim.test$dat),as.numeric(cdmp),as.numeric(truep))
   oracle.cdm.mp<-imv::imv.binary(as.numeric(sim.test$dat),as.numeric(pmp),as.numeric(truep))
+  oracle.map.mp<-imv::imv.binary(as.numeric(sim.test$dat),as.numeric(cdmp),as.numeric(pmp))
   
   rms<-function(x) sqrt(mean(x^2))
   rms.irt<-rms(as.numeric(sim.test$dat)-as.numeric(irtp))
@@ -83,7 +85,8 @@ cdm.sim<-function(a, N=500, modeltype = "DINA") {
     om.mp = om.mp,
     oracle.cdm.mp = oracle.cdm.mp,
     rms.cdm.mp = rms.cdm.mp,
-    rms.cdm.mp.p = rms.cdm.mp.p
+    rms.cdm.mp.p = rms.cdm.mp.p, 
+    oracle.map.mp = oracle.map.mp
     )
 }
 
@@ -114,11 +117,26 @@ simulate_scenario_1 <- function(modeltype = "GDINA") {
 result_dina_1 <- simulate_scenario_1(modeltype = "DINA")
 save(result_dina_1 , file = "simulation_data_update/scenario1_out_dina.RData")
 
+sim_sizes <- c("200", "500", "1000")
+
+# Loop through each and compute convergence rate
+for (size in sim_sizes) {
+  sim_list <- result_dina_1$out2[[size]]
+  hi <- as.data.frame(do.call(rbind, sim_list))
+  num_finite <- sum(is.finite(hi[[1]]))
+  cat("Size:", size, "- Convergence:", num_finite, "\n")
+}
+
 ## Simulate GDINA
 result_gdina_1 <- simulate_scenario_1(modeltype = "GDINA")
 save(result_gdina_1 , file = "simulation_data_update/scenario1_out_gdina.RData")
 
-
+for (size in sim_sizes) {
+  sim_list <- result_gdina_1$out2[[size]]
+  hi <- as.data.frame(do.call(rbind, sim_list))
+  num_finite <- sum(is.finite(hi[[1]]))
+  cat("Size:", size, "- Convergence:", num_finite, "\n")
+}
 ## Plotting
 plot_rmse_imv_panels <- function(a, out2) {
   par(mgp = c(2, 1, 0), mfrow = c(3, 2), mar = c(3, 3, 2, 1), oma = rep(0.5, 4))
@@ -128,7 +146,10 @@ plot_rmse_imv_panels <- function(a, out2) {
                     "RMSE (N = 1000)", "IMV (N = 1000)")
   
   pf <- function(x, y, ...) {
-    m <- loess(y ~ x, family = "symmetric")
+    valid <- is.finite(y)
+    x <- x[valid]
+    y <- y[valid]
+    m <- loess(y ~ x)
     lines(x, predict(m), ..., lwd = 2)
   }
   
@@ -183,10 +204,6 @@ pdf("plots_update/simulation1_gdina_map.pdf", width = 6, height = 8)
 plot_rmse_imv_panels(result_gdina_1$a, result_gdina_1$out2)
 if (!is.null(file)) dev.off()
 
-if (exists("result_dina_1") && is.null(result_dina_1)) {
-  rm(result_dina_1)
-}
-
 pdf("plots_update/simulation1_dina_map.pdf", width = 6, height = 8)
 plot_rmse_imv_panels(result_dina_1$a, result_dina_1$out2)
 if (!is.null(file)) dev.off()
@@ -200,7 +217,10 @@ plot_rmse_imv_panels_mp <- function(a, out2) {
                     "RMSE (N = 1000)", "IMV (N = 1000)")
   
   pf <- function(x, y, ...) {
-    m <- loess(y ~ x,  family = "symmetric")
+    valid <- is.finite(y)
+    x <- x[valid]
+    y <- y[valid]
+    m <- loess(y ~ x)
     lines(x, predict(m), ..., lwd = 2)
   }
   
@@ -260,6 +280,7 @@ pdf("plots_update/simulation1_dina_mp.pdf", width = 6, height = 8)
 plot_rmse_imv_panels_mp(result_dina_1$a, result_dina_1$out2)
 if (!is.null(file)) dev.off()
 
+# i
 plot_imv_only_panels <- function(result_dina, result_gdina) {
   result_dina_a <- result_dina$a
   result_gdina_a <- result_gdina$a
@@ -272,7 +293,10 @@ plot_imv_only_panels <- function(result_dina, result_gdina) {
   panel_titles <- c("DINA with MAP", "G-DINA with MAP", "DINA with mp", "G-DINA with mp")
   
   pf <- function(x, y, ...) {
-    m <- loess(y ~ x, family = "symmetric")
+    valid <- is.finite(y)
+    x <- x[valid]
+    y <- y[valid]
+    m <- loess(y ~ x)
     lines(x, predict(m), ..., lwd = 2)
   }
   
@@ -309,4 +333,31 @@ pdf("plots_update/simulation1_dina_gdina_mp_MAP.pdf", width = 6, height = 6)
 plot_imv_only_panels(result_dina_1, result_gdina_1)
 if (!is.null(file)) dev.off()
 
-###### New
+# Computer IMV(MAP, mp): 
+compute_imv_map_mp <- function(result_dina, result_gdina) {
+  result_dina_a <- result_dina$a
+  result_gdina_a <- result_gdina$a
+  
+  result_dina_om <- as.data.frame(do.call("rbind", result_dina$out2[['500']]))
+  result_gdina_om <- as.data.frame(do.call("rbind", result_gdina$out2[['500']]))
+  
+  x <- result_dina_om[['oracle.map.mp']]
+  x_finite <- x[is.finite(x)]
+  
+  mean_val <- mean(x_finite)
+  sd_val <- sd(x_finite)
+  
+  cat("Mean:", mean_val, "\nSD:", sd_val, "\n")
+  
+  x <- result_gdina_om[['oracle.map.mp']]
+  x_finite <- x[is.finite(x)]
+  
+  mean_val <- mean(x_finite)
+  sd_val <- sd(x_finite)
+  
+  cat("Mean:", mean_val, "\nSD:", sd_val, "\n")
+  
+}
+
+compute_imv_map_mp(result_dina_1, result_gdina_1)
+
