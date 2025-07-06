@@ -470,6 +470,10 @@ df.imv.compare.combined <- df.sim2.results.GDINA %>%
 write_csv(df.sim2.results.GDINA, "simulation_data_update/simulation2_n500_gdina.csv")
 ```
 
+```{r}
+df.sim2.results.GDINA <- read_csv("../simulation_data_update/simulation2_n500_gdina.csv")
+df.sim2.results.DINA <- read_csv("../simulation_data_update/simulation2_n500_dina.csv")
+```
 
 
 ```{r}
@@ -491,12 +495,11 @@ results_mean <- results_50_dina %>%
     .groups = "drop"
   )
 
-
 results_median
 ```
 ```{r}
 
-attribute_types <- c("independent", "mvnorm", "higher.order", "linear",  "converg", "diverg", "unstructured")
+attribute_types <- c("linear",  "converg", "mvnorm", "higher.order","diverg", "independent",  "unstructured")
 df.imv.compare.combined <- df.sim2.results.GDINA %>% 
   rbind(df.sim2.results.DINA) %>% 
   group_by(attribute, modeltype, estmethod) %>%
@@ -542,6 +545,6 @@ ggplot(df_long, aes(x = attribute, y = mean_imv, fill = method)) +
 ```
 
 ```{r}
-ggsave("plots_update/simulation2_n500.pdf", width = 6, height = 4)
+ggsave("../plots_update/simulation2_n500.pdf", width = 6, height = 4)
 ```
 
