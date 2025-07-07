@@ -41,7 +41,7 @@ library(kableExtra)
 
 ```
 ```{r}
-source("00funs.R")
+source("../bd/00funs.R")
 ```
 
 ```{r echo = FALSE}
