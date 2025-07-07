@@ -215,7 +215,7 @@ cdm.pr.marg.update<-function(resp,qm,modeltype="DINA",estmethod = "mp") {
   m <- GDINA(resp,qm,modeltype, mono.constr = TRUE)
   if (!extract(m, "convergence")) {
     print("CDM non-converge")
-    return(FALSE)
+    return(NA)
   } 
   map <- personparm(m, what = estmethod)[,1:ncol(qm), drop = FALSE]
   co<-coef(m) #gs<-coef(m,what='gs')
@@ -242,7 +242,7 @@ cdm.pr.marg.update<-function(resp,qm,modeltype="DINA",estmethod = "mp") {
 }
 
 
-check.qm.omplete <- function(qm) {
+check.qm.complete <- function(qm) {
   K <- ncol(qm)  # Number of skills (attributes)
   
   # Find rows that have exactly one '1' (single-attribute items)
