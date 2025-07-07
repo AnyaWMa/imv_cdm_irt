@@ -2,7 +2,7 @@ irt.pr<-function(resp,modeltype='Rasch',th.type='EAP') {
     ##get irt pvalues
     library(mirt)
     m<-mirt(resp,1,modeltype)
-    th<-fscores(m,,method=th.type)
+    th<-fscores(m,method=th.type)
     co<-coef(m,IRTpars=TRUE,simplify=TRUE)$items
     x<-list()
     for (i in 1:nrow(co)) {
@@ -11,22 +11,6 @@ irt.pr<-function(resp,modeltype='Rasch',th.type='EAP') {
     }
     do.call("cbind",x)
 }
-
-## cdm.pr<-function(resp,qm,modeltype="DINA") {
-##     ##cdm pvalues
-##     library(GDINA)
-##     m <- GDINA(resp,qm,model=modeltype)
-##     map <- personparm(m, what = "EAP")[,1:ncol(qm)]
-##     gs<-coef(m,what='gs')
-##     p<-list()
-##     for (i in 1:nrow(qm)) {
-##         ii<-which(qm[i,]==1)
-##         z<-map[,ii,drop=FALSE]
-##         rm<-rowMeans(z)
-##         p[[i]]<-ifelse(rm==1,1-gs[i,2],gs[i,1])
-##     }
-##     p.cdm<-do.call("cbind",p)
-## }
 
 oos.compare<-function(resp,qm,nfolds=5,modeltype,estmethod = "mp") {
     id<-1:nrow(resp)
@@ -100,7 +84,7 @@ oos.compare.update <-function(resp,qm,truep, nfolds=5,modeltype,estmethod = "mp"
   
 }
 
-oos.compare.newresp<-function(resp,qm,truep, modeltype = "DINA",estmethod = "mp") {
+oos.compare.newresp<-function(resp,qm,truep, modeltype = "DINA", irtmodel = "Rasch", estmethod = "mp") {
     id<-1:nrow(resp)
     item<-names(resp)
     L<-list()
@@ -118,7 +102,7 @@ oos.compare.newresp<-function(resp,qm,truep, modeltype = "DINA",estmethod = "mp"
     p<-do.call("rbind",L)
     df<-merge(df,p)
     ##
-    p.irt<-irt.pr(x)
+    p.irt<-irt.pr(x, modeltype = irtmodel)
     L<-list()
     for (i in 1:ncol(resp)) L[[i]]<-data.frame(id=id,item=names(resp)[i],p.irt=p.irt[,i])
     p<-do.call("rbind",L)
@@ -229,7 +213,11 @@ cdm.pr.marg2<-function(resp,qm,modeltype="GDINA") { #really only works with GDIN
 cdm.pr.marg.update<-function(resp,qm,modeltype="DINA",estmethod = "mp") { 
   library(GDINA)
   m <- GDINA(resp,qm,modeltype, mono.constr = TRUE)
-  map <- personparm(m, what = estmethod)[,1:ncol(qm)]
+  if (!extract(m, "convergence")) {
+    print("CDM non-converge")
+    return(NA)
+  } 
+  map <- personparm(m, what = estmethod)[,1:ncol(qm), drop = FALSE]
   co<-coef(m) #gs<-coef(m,what='gs')
   p<-list()
   for (i in 1:nrow(qm)) {
@@ -254,7 +242,7 @@ cdm.pr.marg.update<-function(resp,qm,modeltype="DINA",estmethod = "mp") {
 }
 
 
-check.qm.omplete <- function(qm) {
+check.qm.complete <- function(qm) {
   K <- ncol(qm)  # Number of skills (attributes)
   
   # Find rows that have exactly one '1' (single-attribute items)
