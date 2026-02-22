@@ -213,7 +213,7 @@ cdm.pr.marg2<-function(resp,qm,modeltype="GDINA") { #really only works with GDIN
 cdm.pr.marg.update<-function(resp,qm,modeltype="DINA",estmethod = "mp") { 
   library(GDINA)
   m <- GDINA(resp,qm,modeltype, mono.constr = TRUE)
-  if (!extract(m, "convergence")) {
+  if (!GDINA::extract(m, "convergence")) {
     print("CDM non-converge")
     return(NA)
   } 

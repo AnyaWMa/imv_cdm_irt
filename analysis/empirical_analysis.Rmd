@@ -36,8 +36,12 @@ library(GDINA)
 library(MASS)
 library(imv)
 library(irw)
+library(pks) 
+library(tidyr)
 
 library(kableExtra)
+library(conflicted)
+conflict_prefer("extract", "tidyr")
 
 ```
 ```{r}
@@ -174,8 +178,8 @@ func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", i
     df.dat.no.id <- df.dat %>% dplyr :: select(-id)
 
     # IRT model
-    mod.irt <- mirt(df.dat.no.id, 1, itemtype = irt_model)
-    
+    mod.irt <- mirt(df.dat.no.id, 1, itemtype = irt_model, technical = list(NCYCLES = 5000))
+  
     if (!extract.mirt(mod.irt, "converged")) {
       print("irt not converged")
       return(NULL)
@@ -184,7 +188,7 @@ func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", i
     thetas <- as.data.frame(fscores(mod.irt))
 
     params <- data.frame(coef(mod.irt, IRTpars = TRUE, simplify = TRUE))
-
+    
     # CDM model
     predict.matrix.cdm.map <- cdm_pr_estimate(df.dat.no.id, qm, model = cdm_model, "MAP")
     if (is.null(predict.matrix.cdm.map)) {
@@ -197,8 +201,6 @@ func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", i
       print("cdm mp not converged")
       return(NULL)
     }
-    
-    
 
     result.cdm.map <- as.data.frame(predict.matrix.cdm.map) %>%
       set_names(item_list) %>%
@@ -387,7 +389,6 @@ timss2011_ready <- timss_data_with_id %>%
   
 ```
 
-
 mental health data
 ```{r}
 load("../data/CDM_AlcoholApplication_Data_IRW.RData")
@@ -452,14 +453,6 @@ df_frac20_clean <- df_frac20 %>% mutate(item = as.integer(substring(item, 6)))
 df_frac20_cdm_structure <- func.convert.Q.data.structure.with.k.fold(df_frac20_clean, 0)
 ```
 
-get from gdina
-```{r}
-df_frac20_cdm_structure_gdina <- GDINA::frac20
-```
-
-```{r}
-all(df_frac20_cdm_structure$Q == df_frac20_cdm_structure_gdina$Q)
-```
 
 
 ### Q2: check if frac20 cdm prediction makes sense?
@@ -497,6 +490,97 @@ for (obj_name in names(q_data2)) {
 }
   
 ```
+### Q4: cdm deep dive
+```{r}
+df <- GDINA::realdata_Tatsuoka1990$dat
+Q <- GDINA::realdata_Tatsuoka1990$Q
+
+#### GDINA estimation
+gest <- GDINA(df,Q,mono.constraint = TRUE,control = list(nstarts=200))
+### Q-matrix validation
+qv <- Qval(gest,method = "wald")
+qv
+#### Fit GDINA with validated Q
+gest2 <- GDINA(df,qv$sug.Q,mono.constraint = TRUE,control = list(nstarts=200))
+
+#### find reduce models
+y <- modelcomp(gest2,method = "Wald")
+y
+
+#######fit the reduced models using the validated Q
+rest2 <- GDINA(df,qv$sug.Q,model=y$selected.model$models,mono.constraint = TRUE,control = list(nstarts=200))
+
+##### compare different models
+anova(gest,gest2,rest2)
+```
+```{r}
+df_1 <- convert.fraction.data(df, Q)
+func.run.analysis.kfold(df_1, "GDINA", "2PL", TRUE, 5, cdm.pr.marg.update)
+```
+```{r}
+df_2 <- convert.fraction.data(df, qv$sug.Q)
+func.run.analysis.kfold(df_2, "GDINA", "2PL", TRUE, 5, cdm.pr.marg.update)
+```
+
+```{r}
+df_2 <- convert.fraction.data(df, qv$sug.Q)
+func.run.analysis.kfold(df_2, y$selected.model$models, "2PL", TRUE, 5, cdm.pr.marg.update)
+```
+
+### Q5 new data 
+Ma & Jiang 2021
+
+```{r}
+data(probability)
+pb <- probability[!is.na(probability$b201), sprintf("b2%.2i", 1:12)]
+Q1=sf1 <- read.table(header = TRUE, text = "
+                    item cp id pb un
+                    1  0  0  1  0
+                    2  1  0  0  0
+                    3  0  0  0  1
+                    4  0  1  0  0
+                    5  1  0  1  0
+                    6  1  0  1  0
+                    7  0  0  1  1
+                    8  0  0  1  1
+                    9  0  1  1  0
+                    10  1  1  0  0
+                    11  1  1  1  0
+                    12  0  1  1  1
+                    ")
+Q1=Q1[,-1]
+
+colnames(Q1) <- paste0("A", 1:4)
+colnames(pb) <- paste0("V", 1:12)
+
+pb_ready <- convert.fraction.data(pb, Q1)
+
+```
+
+```{r}
+func.run.analysis.kfold(pb_ready, "GDINA", "2PL", TRUE, 5, cdm.pr.marg.update)
+```
+
+Tang & Zhan 2021
+```{r}
+Zhan_T1 <- read_csv("../data/zhan_t1/Zhan_T1.csv")
+
+Zhan_T1_Q <- read.table("../data/zhan_t1/Q.txt")
+
+
+colnames(Zhan_T1_Q) <- paste0("A", 1:6)
+```
+```{r}
+rational_number_ready <- convert.fraction.data(Zhan_T1, Zhan_T1_Q)
+```
+```{r}
+func.run.analysis.kfold(rational_number_ready, "DINA", "2PL", TRUE, 5, cdm.pr.marg.update)
+```
+
+```{r}
+func.run.analysis.kfold(rational_number_ready, "GDINA", "2PL", TRUE, 5, cdm.pr.marg.update)
+```
+
 
 ## Run all data
 ```{r}
