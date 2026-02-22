@@ -53,116 +53,128 @@ options(dplyr.summarise.inform = F)
 
 
 # Simulation 2
+
 ```{r}
-oos.compare.flexible <- function(dat, qm, modeltype, estmethod = "mp", nfolds = 5) {
+oos.compare.flexible.two.estimators <- function(dat, qm, modeltype, nfolds = 5, attribute = NA, rep = NA) {
+
   resp <- as.data.frame(dat)
   resp$id <- 1:nrow(resp)
-  result <- list()
 
-  
-  # === Full Sample Mode ===
-  # CDM prediction
-  p.cdm <- cdm.pr.marg.update(resp[, -ncol(resp)], qm, modeltype, estmethod)
-  if (length(p.cdm)==1) {
-    return (list(imv_full = NA, imv_mean = NA, imv_sd = 0))
+  # --- Full-sample IRT (one fit) ---
+  irtfit <- mirt(resp[, -ncol(resp)], 1, '2PL', verbose = FALSE, technical = list(NCYCLES = 5000))
+  if (!extract.mirt(irtfit, 'converged')) {
+    print("IRT did not converge")
+    return(list(
+      estmethod = c("MAP", "mp"),
+      imv_full = NA,
+      imv_mean = NA,
+      imv_sd = NA,
+      attribute = attribute,
+      modeltype = modeltype,
+      rep = rep
+    ))
   }
-  df.cdm <- do.call("rbind", lapply(1:ncol(resp[, -ncol(resp)]), function(i) {
-      data.frame(id = resp$id, item = names(resp)[i], p.cdm = p.cdm[, i])
-    }))
-
-  # IRT prediction
-  
-  irtfit <- mirt(resp[, -ncol(resp)], 1, '2PL', verbose = FALSE)
- 
-  if (!extract.mirt(irtfit , 'converged')) {
-    print("HI")
-    return (list(imv_full = NA, imv_mean = NA, imv_sd = NA))
-  }
-
   th.est <- fscores(irtfit)
   est <- coef(irtfit, simplify = TRUE, IRTpars = TRUE)$items
   k <- outer(th.est[, 1], est[, 2], '-')
   k <- matrix(est[, 1], nrow = nrow(resp), ncol = ncol(resp) - 1, byrow = TRUE) * k
   p.irt <- 1 / (1 + exp(-k))
+  
 
-  df.irt <- do.call("rbind", lapply(1:ncol(resp[, -ncol(resp)]), function(i) {
-      data.frame(id = resp$id, item = names(resp)[i], p.irt = p.irt[, i])
+  df.true <- resp %>%
+    pivot_longer(cols = -id, names_to = "item", values_to = "resp")
+
+  # Convert IRT predictions to long format
+df.irt <- do.call(rbind, lapply(1:ncol(resp[, -ncol(resp)]), function(i) {
+  data.frame(id = resp$id, item = names(resp)[i], p.irt = p.irt[, i])
+}))
+
+# Compute full-sample IMV separately for MAP and mp
+imv_full_vec <- c()
+for (method in c("MAP", "mp")) {
+  p.cdm <- cdm.pr.marg.update(resp[, -ncol(resp)], qm, modeltype, estmethod = method)
+  if (length(p.cdm) == 1) {
+    imv_full_vec <- c(imv_full_vec, NA)
+    next
+  }
+
+  df.cdm <- do.call(rbind, lapply(1:ncol(resp[, -ncol(resp)]), function(i) {
+    data.frame(id = resp$id, item = names(resp)[i], p.cdm = p.cdm[, i])
+  }))
+
+  # merge true responses, CDM, and IRT (all long)
+  df_merge <- df.true %>%
+    left_join(df.cdm, by = c("id", "item")) %>%
+    left_join(df.irt, by = c("id", "item"))
+
+  imv_full_vec <- c(imv_full_vec, imv::imv.binary(df_merge$resp, df_merge$p.irt, df_merge$p.cdm))
+}
+
+  # === K-Fold Mode ===
+  df <- df.true %>%
+    mutate(gr = sample(1:nfolds, nrow(df.true), replace = TRUE))
+
+  fold_om <- list(MAP = numeric(nfolds), mp = numeric(nfolds))
+
+  for (gr in 1:nfolds) {
+    oos <- df[df$gr == gr, ]
+    ins <- df[df$gr != gr, ]
+
+    # wide format for model fitting
+    x <- ins %>%
+      select(-gr) %>%
+      pivot_wider(names_from = item, values_from = resp)
+    id_ins <- x$id
+    x <- x[, names(resp[, -ncol(resp)])]
+
+    # IRT fit per fold
+    irtfit <- mirt(x, 1, '2PL', verbose = FALSE, technical = list(NCYCLES = 5000))
+    if (!extract.mirt(irtfit, 'converged')) next
+
+    th.est <- fscores(irtfit)
+    est <- coef(irtfit, simplify = TRUE, IRTpars = TRUE)$items
+    k <- outer(th.est[, 1], est[, 2], '-')
+    k <- matrix(est[, 1], nrow = nrow(x), ncol = ncol(x), byrow = TRUE) * k
+    p.irt <- 1 / (1 + exp(-k))
+
+    df.irt <- do.call(rbind, lapply(1:ncol(x), function(i) {
+      data.frame(id = id_ins, item = names(x)[i], p.irt = p.irt[, i])
     }))
 
-  # Long format true responses
-  df.true <- resp %>%
-  pivot_longer(cols = -id, names_to = "item", values_to = "resp")
-
-  # Merge predictions and compute IMV
-  df <- df.true %>%
-      left_join(df.cdm, by = c("id", "item")) %>%
-      left_join(df.irt, by = c("id", "item"))
-
-  imv_full <- imv::imv.binary(df$resp, df$p.irt, df$p.cdm)
-  
-  # === K-Fold Mode ===
-  resp <- as.data.frame(dat)
-  df <- resp %>%
-    mutate(id = 1:nrow(resp)) %>%
-    pivot_longer(cols = -id, names_to = "item", values_to = "resp")
-  df$gr <- sample(1:nfolds, nrow(df), replace = TRUE)
-
-  om <- numeric()
-  for (gr in unique(df$gr)) {
-    print(gr)
-      oos <- df[df$gr == gr, ]
-      ins <- df[df$gr != gr, ]
-
-      x <- ins %>%
-        dplyr ::select(-gr) %>%
-        pivot_wider(names_from = item, values_from = resp)
-
-      id <- x$id
-      x <- x[, names(resp)]
-      
-
-      # CDM
-      p.cdm <- cdm.pr.marg.update(x,Q,modeltype,estmethod)
-      
-      if (length(p.cdm)==1) {
-        return (list(imv_full = NA, imv_mean = NA, imv_sd = 0))
-        }
-      df.cdm <- do.call("rbind", lapply(1:ncol(resp), function(i) {
-        data.frame(id = id, item = names(resp)[i], p.cdm = p.cdm[, i])
+    # CDM for both estimators
+    for (method in c("MAP", "mp")) {
+      p.cdm <- cdm.pr.marg.update(x, qm, modeltype, estmethod = method)
+      df.cdm <- do.call(rbind, lapply(1:ncol(x), function(i) {
+        data.frame(id = id_ins, item = names(x)[i], p.cdm = p.cdm[, i])
       }))
 
-      # IRT
-      # IRT with convergence check
-      irtfit <- mirt(x, 1, '2PL', verbose = FALSE)
-      if (!extract.mirt(irtfit, 'converged')) {
-        print("HI")
-        return (list(imv_full = NA, imv_mean = NA, imv_sd = NA))
-      }
-    
-      th.est <- fscores(irtfit)
-      est <- coef(irtfit, simplify = TRUE, IRTpars = TRUE)$items
-      k <- outer(th.est[, 1], est[, 2], '-')
-      k <- matrix(est[, 1], nrow = nrow(x), ncol = J, byrow = TRUE) * k
-      p.irt <- 1 / (1 + exp(-k))
-  
+      oos_eval <- oos %>%
+        left_join(df.cdm, by = c("id", "item")) %>%
+        left_join(df.irt, by = c("id", "item"))
 
-      df.irt <- do.call("rbind", lapply(1:ncol(resp), function(i) {
-        data.frame(id = id, item = names(resp)[i], p.irt = p.irt[, i])
-      }))
-
-      # Merge and evaluate
-      oos_eval <- merge(merge(oos, df.cdm), df.irt)
-      om[gr] <- imv::imv.binary(oos_eval$resp, oos_eval$p.irt, oos_eval$p.cdm)
+      fold_om[[method]][gr] <- imv::imv.binary(oos_eval$resp, oos_eval$p.irt, oos_eval$p.cdm)
     }
-  return(list(imv_full = imv_full, imv_mean = mean(om, na.rm = TRUE), imv_sd = sd(om, na.rm = TRUE)))
-  
+  }
+
+  # --- Return 2-row summary ---
+  tibble(
+    estmethod = c("MAP", "mp"),
+    imv_full = imv_full_vec,
+    imv_mean = sapply(fold_om, mean, na.rm = TRUE),
+    imv_sd = sapply(fold_om, sd, na.rm = TRUE),
+    attribute = attribute,
+    modeltype = modeltype,
+    rep = rep
+  )
 }
 ```
 
-
 ```{r}
+
 cdm.sim.2 <- function(N = 500, modeltype = "DINA", attribute = "mvnorm", repetition = 1) {
+  
   Q <- sim30GDINA$simQ
+  
   J <- nrow(Q)
   K <- ncol(Q)
   a <- 0.5
@@ -170,14 +182,12 @@ cdm.sim.2 <- function(N = 500, modeltype = "DINA", attribute = "mvnorm", repetit
   m <- rep(0, K)
   vcov <- matrix(a, K, K)
   diag(vcov) <- 1
-
   results <- vector("list", repetition)
-
+  
   for (i in seq_len(repetition)) {
-    print("REPETITION ")
     print(i)
-    gs <- matrix(runif(J * 2, 0, 0.3), J, 2)
-
+    gs <- matrix(runif(nrow(Q)*2, 0, 0.3), nrow(Q), 2)
+    
     sim <- switch(attribute,
       independent = simGDINA(N, Q, gs.parm = gs, model = modeltype, gs.args = list(mono.constraint = TRUE)),
       mvnorm = simGDINA(N, Q, gs.parm = gs, model = modeltype,
@@ -220,20 +230,12 @@ cdm.sim.2 <- function(N = 500, modeltype = "DINA", attribute = "mvnorm", repetit
                  att.dist = "categorical", att.prior = struc$att.prob)
       }
     )
-
-    list1 <- oos.compare.flexible(sim$dat, Q, modeltype, estmethod = "MAP", nfold = 5)
-    list2 <- oos.compare.flexible(sim$dat, Q, modeltype, estmethod = "mp", nfold = 5)
-
-    result_tbl <- bind_rows(
-      as_tibble(list1) %>% mutate(estmethod = "MAP"),
-      as_tibble(list2) %>% mutate(estmethod = "mp")
-    ) %>% mutate(attribute = attribute, modeltype = modeltype, rep = i)
-
-    results[[i]] <- result_tbl
+    
+    results[[i]] <- oos.compare.flexible.two.estimators(sim$dat, Q, modeltype, nfolds = 5, attribute = attribute, rep = i)
+    
   }
-
-  final_tbl <- bind_rows(results)
-  return(final_tbl)
+  
+  bind_rows(results)
 }
 ```
 
@@ -245,21 +247,17 @@ library(purrr)
 plan(multisession)
 set.seed(123)
 simulate_scenario_2_attribute_linear <- function(modeltype = "GDINA") {
-  attribute_types <- c("linear", "mvnorm", "higher.order", "independent", "converg", "diverg", "unstructured")
   
   attribute_types <- c("linear")
   
   # Run one simulation per attribute type
   purrr::map_dfr(attribute_types, function(attr) {
-    cdm.sim.2(N = 500, modeltype = modeltype, attribute = attr, repetition = 10)
+    cdm.sim.2(N = 500, modeltype = modeltype, attribute = attr, repetition = 100)
   })
 }
 
 ```
 
-```{r}
-df.sim2.results <- simulate_scenario_2_attribute("GDINA")
-```
 ```{r}
 set.seed(123)
 df.sim2.results.DINA.1 <- simulate_scenario_2_attribute_linear("DINA")
@@ -276,7 +274,7 @@ simulate_scenario_2_attribute_independent<- function(modeltype = "GDINA") {
   
   # Run one simulation per attribute type
   purrr::map_dfr(attribute_types, function(attr) {
-    cdm.sim.2(N = 500, modeltype = modeltype, attribute = attr, repetition = 10)
+    cdm.sim.2(N = 500, modeltype = modeltype, attribute = attr, repetition = 100)
   })
 }
 
@@ -293,7 +291,7 @@ simulate_scenario_2_attribute_others<- function(modeltype = "GDINA") {
   
   # Run one simulation per attribute type
   purrr::map_dfr(attribute_types, function(attr) {
-    cdm.sim.2(N = 500, modeltype = modeltype, attribute = attr, repetition = 10)
+    cdm.sim.2(N = 500, modeltype = modeltype, attribute = attr, repetition = 100)
   })
 }
 
@@ -303,8 +301,9 @@ df.sim2.results.DINA.3 <- simulate_scenario_2_attribute_others("DINA")
 df.sim2.results.DINA <- rbind(df.sim2.results.DINA.1, df.sim2.results.DINA.2, df.sim2.results.DINA.3)
 ```
 ```{r}
-write_csv(df.sim2.results.DINA, "simulation_data_update/simulation2_n500_dina.csv")
+write_csv(df.sim2.results.DINA, "../simulation_data_update/simulation2_n500_dina_rep100.csv")
 ```
+
 ```{r}
 df.sim2.results.DINA %>% 
   group_by(attribute, modeltype, estmethod) %>%
@@ -325,7 +324,7 @@ simulate_scenario_2_attribute<- function(modeltype = "GDINA") {
   # Run one simulation per attribute type
   purrr::map_dfr(attribute_types, function(attr) {
     print(attr)
-    cdm.sim.2(N = 500, modeltype = modeltype, attribute = attr, repetition = 10)
+    cdm.sim.2(N = 500, modeltype = modeltype, attribute = attr, repetition = 100)
   })
 }
 
@@ -347,7 +346,12 @@ df.imv.compare.combined <- df.sim2.results.GDINA %>%
 ```
 
 ```{r}
-write_csv(df.sim2.results.GDINA, "simulation_data_update/simulation2_n500_gdina.csv")
+df.imv.compare.combined
+```
+
+
+```{r}
+write_csv(df.sim2.results.GDINA, "../simulation_data_update/simulation2_n500_gdina_rep100.csv")
 ```
 
 ```{r}
@@ -416,8 +420,8 @@ ggplot(df_long, aes(x = attribute, y = mean_imv, fill = method)) +
     strip.text = element_text(size = 12)
   ) +
   scale_fill_manual(
-    name = "Method",
-    values = c("mean_imv_full" = "#F8766D", "mean_imv_oos" = "#00BFC4"),
+    name = "Method",#0072B2
+    values = c("mean_imv_full" = "#0072B2", "mean_imv_oos" = "#E69F00"),
     labels = c("mean_imv_full" = "in-sample", "mean_imv_oos" = "out-of-sample fold")
   ) +
   scale_x_discrete(expand = expansion(mult = c(0.1, 0.1)))
@@ -425,6 +429,6 @@ ggplot(df_long, aes(x = attribute, y = mean_imv, fill = method)) +
 ```
 
 ```{r}
-ggsave("../plots_update/simulation2_n500.pdf", width = 6, height = 4)
+ggsave("../plots_update/simulation2_n500_rep100.pdf", width = 6, height = 4)
 ```
 
