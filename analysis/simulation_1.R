@@ -167,16 +167,16 @@ plot_rmse_imv_panels <- function(a, out2) {
       cdm <- z[, 5]
       irt.p <- z[, 6]
       cdm.p <- z[, 7]
-      pf(a, irt, col = 'blue', ...)
-      pf(a, cdm, col = 'red', ...)
-      pf(a, irt.p, col = 'blue', lty = 2, ...)
-      pf(a, cdm.p, col = 'red', lty = 2, ...)
+      pf(a, irt, col = '#33BFD5', ...)
+      pf(a, cdm, col = '#D22730', ...)
+      pf(a, irt.p, col = '#33BFD5', lty = 2, ...)
+      pf(a, cdm.p, col = '#D22730', lty = 2, ...)
     }
     
     f_rmse(out2[[i]])
     
     legend("topright", bty = 'n', lty = c(1, 1, 2, 2),
-           col = c("blue", "red", "blue", "red"), cex = 1,
+           col = c("#33BFD5", "#D22730", "#33BFD5", "#D22730"), cex = 1,
            legend = c("(resp,IRT)", "(resp,CDM)", "(True,IRT)", "(True,CDM)"))
     
     ## IMV Plot
@@ -189,17 +189,20 @@ plot_rmse_imv_panels <- function(a, out2) {
       om <- do.call("rbind", out)
       abline(h = 0)
       pf(a, om[, 1], ...)
-      pf(a, om[, 2], col = 'blue', lty = 2, ...)
-      pf(a, om[, 3], col = 'red', lty = 2, ...)
+      pf(a, om[, 2], col = '#33BFD5', lty = 2, ...)
+      pf(a, om[, 3], col = '#D22730', lty = 2, ...)
     }
     
     f_imv(out2[[i]])
     
     legend("topright", bty = 'n', lty = c(1, 2, 2),
-           col = c("black", "blue", "red"), cex = 1,
+           col = c("black", "#33BFD5", "#D22730"), cex = 1,
            legend = c("(IRT,CDM)", "(IRT,True)", "(CDM,True)"))
   }
 }
+load("simulation_data_update/scenario1_out_dina.RData")
+load("simulation_data_update/scenario1_out_gdina.RData")
+
 pdf("plots_update/simulation1_gdina_map.pdf", width = 6, height = 8)
 plot_rmse_imv_panels(result_gdina_1$a, result_gdina_1$out2)
 if (!is.null(file)) dev.off()
@@ -238,16 +241,16 @@ plot_rmse_imv_panels_mp <- function(a, out2) {
       cdm <- z[, 10]
       irt.p <- z[, 6]
       cdm.p <- z[, 11]
-      pf(a, irt, col = 'blue', ...)
-      pf(a, cdm, col = 'red', ...)
-      pf(a, irt.p, col = 'blue', lty = 2, ...)
-      pf(a, cdm.p, col = 'red', lty = 2, ...)
+      pf(a, irt, col = '#33BFD5', ...)
+      pf(a, cdm, col = '#D22730', ...)
+      pf(a, irt.p, col = '#33BFD5', lty = 2, ...)
+      pf(a, cdm.p, col = '#D22730', lty = 2, ...)
     }
     
     f_rmse(out2[[i]])
     
     legend("topright", bty = 'n', lty = c(1, 1, 2, 2),
-           col = c("blue", "red", "blue", "red"), cex = 1,
+           col = c("#33BFD5", "#D22730", "#33BFD5", "#D22730"), cex = 1,
            legend = c("(resp,IRT)", "(resp,CDM)", "(True,IRT)", "(True,CDM)"))
     
     ## IMV Plot
@@ -260,14 +263,14 @@ plot_rmse_imv_panels_mp <- function(a, out2) {
       om <- do.call("rbind", out)
       abline(h = 0)
       pf(a, om[, 8], ...)
-      pf(a, om[, 2], col = 'blue', lty = 2, ...)
-      pf(a, om[, 9], col = 'red', lty = 2, ...)
+      pf(a, om[, 2], col = '#33BFD5', lty = 2, ...)
+      pf(a, om[, 9], col = '#D22730', lty = 2, ...)
     }
     
     f_imv(out2[[i]])
     
     legend("topright", bty = 'n', lty = c(1, 2, 2),
-           col = c("black", "blue", "red"), cex = 1,
+           col = c("black", "#33BFD5", "#D22730"), cex = 1,
            legend = c("(IRT,CDM)", "(IRT,True)", "(CDM,True)"))
   }
 }
@@ -320,11 +323,11 @@ plot_imv_only_panels <- function(result_dina, result_gdina) {
     abline(h = 0)
     
     pf(a, om[, cols[1]], col = 'black')
-    pf(a, om[, cols[2]], col = 'blue', lty = 2)
-    pf(a, om[, cols[3]], col = 'red', lty = 2)
+    pf(a, om[, cols[2]], col = '#33BFD5', lty = 2)
+    pf(a, om[, cols[3]], col = '#D22730', lty = 2)
     
     legend("topright", bty = 'n', lty = c(1, 2, 2),
-           col = c("black", "blue", "red"), cex = 0.9,
+           col = c("black", "#33BFD5", "#D22730"), cex = 0.9,
            legend = c("(IRT,CDM)", "(IRT,True)", "(CDM,True)"))
   }
 }
