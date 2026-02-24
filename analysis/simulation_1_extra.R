@@ -35,9 +35,6 @@ cdm.sim<-function(a, N=500, modeltype = "DINA") {
   #prediction from true cdm
   truep <- sim$LCprob.parm[sim$att.group,]
   
-  
-  ### new
-  
   # --- build "free" confirmatory model + priors (all items load on all factors) ---
   cov_terms <- character(0)
   if (K >= 2) {
