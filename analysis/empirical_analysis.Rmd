@@ -38,6 +38,7 @@ library(imv)
 library(irw)
 library(pks) 
 library(tidyr)
+library(purrr)
 
 library(kableExtra)
 library(conflicted)
@@ -678,6 +679,79 @@ q_data3 <- list(
 empirical_q_data_new <- append(append(q_data, q_data2), q_data3)
 ```
 
+## Arribute correlations report 
+```{r}
+
+get_cdm_corr_summary <- function(df_long, Q_matrix, dataset_name = "Dataset", model = "DINA") {
+  df_wide <- df_long %>%
+    dplyr::select(-gr) %>%
+    dplyr::arrange(item) %>%
+    tidyr::pivot_wider(names_from = item, values_from = resp) %>%
+    dplyr::arrange(id)
+  
+  df_no_id <- df_wide %>% dplyr::select(-id)
+  
+  mod <- GDINA(df_no_id, Q_matrix, model = model, mono.constraint = TRUE)
+  att_post <- personparm(mod, what = "EAP")
+  att_post <- att_post[, !colnames(att_post) %in% "multimodes"]
+  
+  att_cor <- cor(att_post)
+  cor_values <- att_cor[upper.tri(att_cor)]
+  cor_values <- cor_values[!is.na(cor_values)]
+  
+  median_cor <- median(cor_values)
+  Q1 <- quantile(cor_values, 0.25)
+  Q3 <- quantile(cor_values, 0.75)
+  IQR_cor <- IQR(cor_values)
+  
+  tibble(
+    median = median_cor,
+    Q1 = Q1,
+    Q3 = Q3,
+    IQR = IQR_cor
+  )
+}
+
+exclude_prefixes <- c("cdm_timss", "cdm_pisa0", "hmcdm_spa", "cdm_hr")
+
+summary_table_attribute_cor <- map_dfr(names(empirical_q_data_new), function(dataset_name) {
+  if (substring(dataset_name, 1, 9) %in% exclude_prefixes) return(NULL)
+  
+  dat <- if (is.data.frame(empirical_q_data_new[[dataset_name]])) {
+    empirical_q_data_new[[dataset_name]]
+  } else {
+    empirical_q_data_new[[dataset_name]]$to_data_frame()
+  }
+  
+  cdm_struct <- func.convert.Q.data.structure.with.k.fold(dat, kfold = 0)
+  
+  dina_res  <- get_cdm_corr_summary(cdm_struct$dat_kfold, cdm_struct$Q,
+                                    dataset_name = dataset_name, model = "DINA")
+  gdina_res <- get_cdm_corr_summary(cdm_struct$dat_kfold, cdm_struct$Q,
+                                    dataset_name = dataset_name, model = "GDINA")
+  
+  tibble(
+    dataset = dataset_name,
+    median_DINA = dina_res$median,
+    Q1_DINA     = dina_res$Q1,
+    Q3_DINA     = dina_res$Q3,
+    IQR_DINA    = dina_res$IQR,
+    median_GDINA = gdina_res$median,
+    Q1_GDINA     = gdina_res$Q1,
+    Q3_GDINA     = gdina_res$Q3,
+    IQR_GDINA    = gdina_res$IQR
+  )
+})
+
+summary_table_attribute_cor <- summary_table_attribute_cor %>% arrange(dataset)
+
+```
+```{r}
+#write_csv(summary_table_attribute_cor, "../empirical_output/empirical_data_attribute_correlation.csv")
+```
+
+
+
 ## sanity check 
 
 ### Q1: check if q_matrix is correct?
@@ -762,6 +836,7 @@ rest2 <- GDINA(df,qv$sug.Q,model=y$selected.model$models,mono.constraint = TRUE,
 ##### compare different models
 anova(gest,gest2,rest2)
 ```
+
 ```{r}
 df_1 <- convert.fraction.data(df, Q)
 func.run.analysis.kfold(df_1, "GDINA", "2PL", TRUE, 5, cdm.pr.marg.update)
@@ -853,9 +928,6 @@ IMV(M2PL, CDM)
 set.seed(10)
 df.imv.compare.1.m2pl <- func.run.empirical.data(empirical_q_data_new, cdm_model = "DINA", irt_model = "2PL", is_m2pl =TRUE)
 ```
-
-
-
 
 ## Analysis
 ```{r}
