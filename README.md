@@ -4,7 +4,9 @@ This repo supports the paper: "A comparison of the predictive performance of con
 
 ## Analysis
 Simulation Study 1: analysis/simulation_1.R\
+Simulation Study 1 comparing multidimensional 2PL and CDMs: analysis/simulation_1_extra.R
 Simulation Study 2: analysis/simulation_2.Rmd\
+
 Empirical Study: analysis/empirical_analysis.Rmd
 
 ## Reference
