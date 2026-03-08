@@ -301,10 +301,6 @@ func.run.analysis.kfold.m2pl <- function(df, cdm_model = "DINA", irt_model = "2P
     
     df.dat.no.id <- df.dat %>% dplyr :: select(-id)
     
-    # IRT models
-    # ---- add by Yiqing：support m2pl_prior and m2pl_q_constrained，output prediction.irt ----
-    
-      
       resp_mat <- df.dat.no.id
       Q <- qm
       
@@ -467,9 +463,6 @@ func.run.analysis.kfold.m2pl <- function(df, cdm_model = "DINA", irt_model = "2P
 # Empirical analysis
 
 ## Organize all data
-```{r}
-empirical_q_data
-```
 
 ```{r}
 func.run.empirical.data <- function(q_data, cdm_model = "DINA", irt_model = "2PL", cdm_pr_estimate = cdm.pr.marg.update, is_m2pl = FALSE) {
