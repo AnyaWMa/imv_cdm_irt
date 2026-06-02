@@ -144,73 +144,151 @@ simulate_scenario_1 <- function(modeltype = "GDINA") {
 result_dina_1_multi_irt <- simulate_scenario_1(modeltype = "DINA")
 save(result_dina_1_multi_irt , file = "simulation_data_update/scenario1_out_dina_multi_irt.RData")
 
+load("simulation_data_update/scenario1_out_dina_multi_irt.RData")
 sim_sizes <- c("200", "500", "1000")
 
 ## Plotting
-plot_rmse_imv_panels <- function(a, out2) {
-  par(mgp = c(2, 1, 0), mfrow = c(3, 2), mar = c(3, 3, 2, 1), oma = rep(0.5, 4))
+plot_rmse_imv_panels <- function(
+    a, out2,
+    cex.axis = 1.3,
+    cex.lab = 1.5,
+    cex.main = 1.5,
+    cex.legend = 1.2
+) {
   
-  panel_titles <- c("RMSE (N = 200)", "IMV (N = 200)", 
-                    "RMSE (N = 500)", "IMV (N = 500)", 
-                    "RMSE (N = 1000)", "IMV (N = 1000)")
+  op <- par(no.readonly = TRUE)
+  on.exit(par(op))
+  
+  par(
+    mfrow = c(3, 2),
+    mar = c(3.5, 3.5, 2.5, 1),
+    mgp = c(2.2, 0.7, 0),
+    oma = c(0.5, 0.5, 0.5, 0.5),
+    cex.axis = 1.3,
+    cex.lab = 1.4
+  )
+  
+  panel_titles <- c(
+    "RMSE (N = 200)", "IMV (N = 200)",
+    "RMSE (N = 500)", "IMV (N = 500)",
+    "RMSE (N = 1000)", "IMV (N = 1000)"
+  )
   
   pf <- function(x, y, ...) {
     valid <- is.finite(y)
     x <- x[valid]
     y <- y[valid]
+    
+    ord <- order(x)
+    x <- x[ord]
+    y <- y[ord]
+    
     m <- loess(y ~ x)
     lines(x, predict(m), ..., lwd = 2)
   }
   
   for (i in seq_along(out2)) {
     
-    ## RMSE Plot
-    plot(NULL, xlim = c(0, 0.8), ylim = c(0, 0.6), 
-         xlab = expression(rho), ylab = 'RMSE(oos resp, est)')
-    title(panel_titles[2 * i - 1], line = 0.5, cex.main = 1)
-    #mtext(paste0("(", letters[2 * i - 1], ")"), side = 3, adj = 0, cex = 1)
+    ## RMSE
+    plot(
+      NULL,
+      xlim = c(0, 0.8),
+      ylim = c(0, 0.6),
+      xlab = expression(rho),
+      ylab = "RMSE(oos resp, est)"
+    )
+    
+    title(
+      panel_titles[2 * i - 1],
+      line = 0.5,
+      cex.main = cex.main
+    )
     
     f_rmse <- function(out, ...) {
-      z <- do.call("rbind", out)
-      irt <- z[, 4]
-      cdm <- z[, 5]
+      z <- do.call(rbind, out)
+      
+      irt   <- z[, 4]
+      cdm   <- z[, 5]
       irt.p <- z[, 6]
       cdm.p <- z[, 7]
-      pf(a, irt, col = '#33BFD5', ...)
-      pf(a, cdm, col = '#D22730', ...)
-      pf(a, irt.p, col = '#33BFD5', lty = 2, ...)
-      pf(a, cdm.p, col = '#D22730', lty = 2, ...)
+      
+      pf(a, irt,   col = "#33BFD5", ...)
+      pf(a, cdm,   col = "#D22730", ...)
+      pf(a, irt.p, col = "#33BFD5", lty = 2, ...)
+      pf(a, cdm.p, col = "#D22730", lty = 2, ...)
     }
     
     f_rmse(out2[[i]])
     
-    legend("topright", bty = 'n', lty = c(1, 1, 2, 2),
-           col = c("#33BFD5", "#D22730", "#33BFD5", "#D22730"), cex = 1,
-           legend = c("(resp,IRT)", "(resp,CDM)", "(True,IRT)", "(True,CDM)"))
+    legend(
+      "topright",
+      bty = "n",
+      lty = c(1, 1, 2, 2),
+      col = c("#33BFD5", "#D22730", "#33BFD5", "#D22730"),
+      cex = cex.legend,
+      legend = c(
+        "(resp,IRT)",
+        "(resp,CDM)",
+        "(True,IRT)",
+        "(True,CDM)"
+      )
+    )
     
-    ## IMV Plot
-    plot(NULL, xlim = c(0, 0.8), ylim = c(-0.05, 0.2),
-         xlab = expression(rho), ylab = 'IMV')
-    title(panel_titles[2 * i], line = 0.5, cex.main = 1)
-    #mtext(paste0("(", letters[2 * i], ")"), side = 3, adj = 0, cex = 1)
+    ## IMV
+    plot(
+      NULL,
+      xlim = c(0, 0.8),
+      ylim = c(-0.05, 0.2),
+      xlab = expression(rho),
+      ylab = "IMV"
+    )
+    
+    title(
+      panel_titles[2 * i],
+      line = 0.5,
+      cex.main = cex.main
+    )
     
     f_imv <- function(out, ...) {
-      om <- do.call("rbind", out)
+      om <- do.call(rbind, out)
+      
       abline(h = 0)
+      
       pf(a, om[, 1], ...)
-      pf(a, om[, 2], col = '#33BFD5', lty = 2, ...)
-      pf(a, om[, 3], col = '#D22730', lty = 2, ...)
+      pf(a, om[, 2], col = "#33BFD5", lty = 2, ...)
+      pf(a, om[, 3], col = "#D22730", lty = 2, ...)
     }
     
     f_imv(out2[[i]])
     
-    legend("topright", bty = 'n', lty = c(1, 2, 2),
-           col = c("black", "#33BFD5", "#D22730"), cex = 1,
-           legend = c("(IRT,CDM)", "(IRT,True)", "(CDM,True)"))
+    legend(
+      "topright",
+      bty = "n",
+      lty = c(1, 2, 2),
+      col = c("black", "#33BFD5", "#D22730"),
+      cex = cex.legend,
+      legend = c(
+        "(IRT,CDM)",
+        "(IRT,True)",
+        "(CDM,True)"
+      )
+    )
   }
 }
 
+pdf(
+  "plots_update/simulation1_dina_map_multi_irt.pdf",
+  width = 6,
+  height = 8
+)
 
-pdf("plots_update/simulation1_dina_map_multi_irt.pdf", width = 6, height = 8)
-plot_rmse_imv_panels(result_dina_1_multi_irt$a, result_dina_1_multi_irt$out2)
+plot_rmse_imv_panels(
+  result_dina_1_multi_irt$a,
+  result_dina_1_multi_irt$out2,
+  cex.axis = 1.3,
+  cex.lab = 1.7,
+  cex.main = 1.3,
+  cex.legend = 1.3
+)
+
 if (!is.null(file)) dev.off()

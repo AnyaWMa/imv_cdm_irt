@@ -359,7 +359,6 @@ df.sim2.results.GDINA <- read_csv("../simulation_data_update/simulation2_n500_gd
 df.sim2.results.DINA <- read_csv("../simulation_data_update/simulation2_n500_dina.csv")
 ```
 
-
 ```{r}
 results_median <- results_50_dina %>%
   group_by(attribute, modeltype, estmethod) %>%
@@ -404,7 +403,13 @@ df_long <- df.imv.compare.combined %>%
   mutate(sd = case_when(
     method == "mean_imv_full" ~ sd_imv_full,
     method == "mean_imv_oos"  ~ sd_imv_oos
-  ))
+  )) %>% 
+  mutate(modeltype = ifelse(modeltype == "GDINA", "G-DINA", modeltype))
+
+```
+
+
+```{r}
 ggplot(df_long, aes(x = attribute, y = mean_imv, fill = method)) +
   geom_bar(stat = "identity", width = 0.8, position = position_dodge(width = 0.8)) +
   geom_errorbar(aes(ymin = mean_imv - sd, ymax = mean_imv + sd),
@@ -417,7 +422,9 @@ ggplot(df_long, aes(x = attribute, y = mean_imv, fill = method)) +
     axis.text.x = element_text(angle = 45, hjust = 1),
     legend.position = "bottom",
     panel.spacing = unit(1.5, "lines"),
-    strip.text = element_text(size = 12)
+    strip.text = element_text(size = 12),
+    axis.text = element_text(size = 10), 
+    legend.text = element_text(size = 10), 
   ) +
   scale_fill_manual(
     name = "Method",#0072B2

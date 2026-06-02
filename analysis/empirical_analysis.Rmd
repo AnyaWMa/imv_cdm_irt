@@ -1011,11 +1011,16 @@ df.imv.compare.combined <- df.imv.compare.combined.revision %>%
 #write_csv(df.imv.compare.combined, "../empirical_output/empirical_output_imv_irt_cdm.csv")
 ```
 
+```{r}
+#df.imv.compare.combined <- read_csv("../empirical_output/empirical_output_imv_irt_cdm.csv")
+```
+
 ```{r height = 8}
 df_long <- df.imv.compare.combined %>%
   pivot_longer(cols = c(mean_all, mean_kfold),
                names_to = "method",
-               values_to = "mean_imv")
+               values_to = "mean_imv") %>% 
+  mutate(cdm_model = ifelse(cdm_model == "GDINA", "G-DINA",cdm_model))
 
 df_long_modified <- df_long %>% 
   mutate(method = ifelse(method == "mean_all", "in-sample", "out-of-sample fold")) %>% 
