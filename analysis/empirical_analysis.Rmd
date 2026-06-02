@@ -36,8 +36,13 @@ library(GDINA)
 library(MASS)
 library(imv)
 library(irw)
+library(pks) 
+library(tidyr)
+library(purrr)
 
 library(kableExtra)
+library(conflicted)
+conflict_prefer("extract", "tidyr")
 
 ```
 ```{r}
@@ -174,8 +179,8 @@ func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", i
     df.dat.no.id <- df.dat %>% dplyr :: select(-id)
 
     # IRT model
-    mod.irt <- mirt(df.dat.no.id, 1, itemtype = irt_model)
-    
+    mod.irt <- mirt(df.dat.no.id, 1, itemtype = irt_model, technical = list(NCYCLES = 5000))
+  
     if (!extract.mirt(mod.irt, "converged")) {
       print("irt not converged")
       return(NULL)
@@ -184,7 +189,7 @@ func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", i
     thetas <- as.data.frame(fscores(mod.irt))
 
     params <- data.frame(coef(mod.irt, IRTpars = TRUE, simplify = TRUE))
-
+    
     # CDM model
     predict.matrix.cdm.map <- cdm_pr_estimate(df.dat.no.id, qm, model = cdm_model, "MAP")
     if (is.null(predict.matrix.cdm.map)) {
@@ -197,8 +202,6 @@ func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", i
       print("cdm mp not converged")
       return(NULL)
     }
-    
-    
 
     result.cdm.map <- as.data.frame(predict.matrix.cdm.map) %>%
       set_names(item_list) %>%
@@ -278,16 +281,191 @@ func.run.analysis.kfold <- function(df, cdm_model = "DINA", irt_model = "2PL", i
 }
 ```
 
+```{r}
+func.run.analysis.kfold.m2pl <- function(df, cdm_model = "DINA", irt_model = "2PL", if_oos = TRUE, kfold = 5, cdm_pr_estimate = cdm.pr.marg.update) {
+  n_items <- n_distinct(df$item)
+  item_list <- sort(unique(df$item))
+  
+  df.cdm.structure <- func.convert.Q.data.structure.with.k.fold(df, kfold = kfold)
+  
+  func.get.prediction.result <- function(df.tmp, dat, qm){
+    
+    df.ids <- df.tmp %>% group_by(id) %>%
+      tally()
+    
+    df.dat <- dat %>%
+      dplyr ::select(-gr) %>%
+      dplyr :: arrange(item) %>%
+      pivot_wider(names_from = item, values_from = resp) %>%
+      dplyr ::arrange(id)
+    
+    df.dat.no.id <- df.dat %>% dplyr :: select(-id)
+    
+      resp_mat <- df.dat.no.id
+      Q <- qm
+      
+      ############# fit model with priors (m2pl_prior) #############
+      J <- ncol(resp_mat)
+      K <- ncol(Q)
+      
+      # COV terms
+      cov_terms <- character(0)
+      if (K >= 2) {
+        for (k1 in 1:(K-1)) for (k2 in (k1+1):K) cov_terms <- c(cov_terms, paste0("F", k1, "*F", k2))
+      }
+      
+      # PRIOR terms: (1-J, a1, lnorm, 0, 1), ... (1-J, aK, lnorm, 0, 1)
+      prior_terms <- paste0("(1-", J, ", a", 1:K, ", lnorm, 0.0, 1.0)", collapse = ",")
+      
+      s_prior <- paste0(
+        paste0("F", 1:K, " = 1-", J, collapse = "\n"),
+        if (K >= 2) paste0("\nCOV = ", paste(cov_terms, collapse = ",")) else "",
+        "\nPRIOR = ", prior_terms
+      )
+      
+      modspec_prior <- mirt.model(s_prior)
+      
+      mod_m2pl_prior <- mirt(
+        data     = resp_mat,
+        model    = modspec_prior,
+        itemtype = "2PL",
+        method   = "MHRM",
+        verbose  = TRUE,
+        technical = list(NCYCLES = 2000)
+      )
+      
+      if (!extract.mirt(mod_m2pl_prior, "converged")) {
+        print("irt not converged")
+        return(NULL)
+      }
+      
+      # ---- predicted P(Y=1), N x J ----
+      theta_prior <- fscores(mod_m2pl_prior, full.scores = TRUE, QMC=TRUE)
+      p_all_prior <- probtrace(mod_m2pl_prior, Theta = theta_prior)
+      P_irt_prior <- p_all_prior[, grep("\\.P\\.1$", colnames(p_all_prior)), drop = FALSE]
+      colnames(P_irt_prior) <- colnames(resp_mat)
+      
+      result.m2pl <- as.data.frame(P_irt_prior) %>%
+        mutate(id = df.dat$id) %>%
+        pivot_longer(cols = colnames(resp_mat), names_to = "item", values_to = "prediction.m2pl") %>%
+        left_join(df.tmp, by = c("id","item")) %>%
+        dplyr ::select(id, item, resp, gr, prediction.m2pl)
+      
+    # 2PL 
+    mod.irt <- mirt(df.dat.no.id, 1, itemtype = irt_model, technical = list(NCYCLES = 5000))
+  
+    if (!extract.mirt(mod.irt, "converged")) {
+      print("irt not converged")
+      return(NULL)
+    }
+
+    thetas <- as.data.frame(fscores(mod.irt))
+
+    params <- data.frame(coef(mod.irt, IRTpars = TRUE, simplify = TRUE))
+    
+    result.irt <- tibble(th = thetas$F1, id = df.dat$id) %>%
+      left_join(df.tmp) %>%
+      left_join(rownames_to_column(params, var = "item")) %>%
+      mutate(prediction.irt = prob.irt(items.a, items.b, th)) %>%
+      dplyr ::select(id, item, resp, gr, prediction.irt)
+
+    # CDM model
+    predict.matrix.cdm.map <- cdm_pr_estimate(df.dat.no.id, qm, model = cdm_model, "MAP")
+    if (is.null(predict.matrix.cdm.map)) {
+      print("cdm map not converged")
+      return(NULL)
+    }
+    
+    predict.matrix.cdm.mp <- cdm_pr_estimate(df.dat.no.id, qm, model = cdm_model, "mp")
+    if (is.null(predict.matrix.cdm.mp)) {
+      print("cdm mp not converged")
+      return(NULL)
+    }
+    
+    
+    result.cdm.map <- as.data.frame(predict.matrix.cdm.map) %>%
+      set_names(item_list) %>%
+      mutate(id = df.ids$id) %>%
+      pivot_longer(cols = item_list, names_to = "item", values_to = "prediction.cdm.map")
+    
+    result.cdm.mp <- as.data.frame(predict.matrix.cdm.mp) %>%
+      set_names(item_list) %>%
+      mutate(id = df.ids$id) %>%
+      pivot_longer(cols = item_list, names_to = "item", values_to = "prediction.cdm.mp")
+    
+    result.compared <- result.cdm.map %>%
+      left_join(result.cdm.mp) %>%
+      left_join(df.tmp) %>%
+      left_join(result.irt) %>% 
+      left_join(result.m2pl)
+  }
+  
+  list.imv.1 <- list()
+  list.imv.2 <- list()
+  list.imv.3 <- list()
+  
+  if (!if_oos) {
+    result.compared <- func.get.prediction.result(
+      df.cdm.structure$dat_kfold, 
+      df.cdm.structure$dat_kfold, 
+      df.cdm.structure$Q
+    )
+    
+    if (is.null(result.compared)) return(NA)
+    
+    df.compare <- result.compared %>% 
+      filter(!is.na(prediction.irt), 
+             !is.na(prediction.m2pl),
+             !is.na(prediction.cdm.map), 
+             !is.na(prediction.cdm.mp))
+    
+    list.imv.1 <- c(imv::imv.binary(df.compare$resp, df.compare$prediction.m2pl, df.compare$prediction.cdm.map))
+    list.imv.2 <- c(imv::imv.binary(df.compare$resp, df.compare$prediction.m2pl, df.compare$prediction.cdm.mp))
+    list.imv.3 <- c(imv::imv.binary(df.compare$resp, df.compare$prediction.irt, df.compare$prediction.m2pl))
+    
+  } else {
+    for (i in seq(1, kfold, 1)) {
+      df.tmp <- df.cdm.structure$dat_kfold
+      
+      df.train <- df.tmp %>% 
+        filter(gr != i) 
+      
+      result.compared <- func.get.prediction.result(df.tmp, df.train, df.cdm.structure$Q)
+      
+      if (is.null(result.compared)) return(next)
+      
+      df.compare <- result.compared %>% 
+        filter(gr == i) %>% 
+        filter(!is.na(prediction.irt), !is.na(prediction.cdm.map), !is.na(prediction.cdm.mp), !is.na(prediction.m2pl))
+      
+      imv.1 <- c(imv::imv.binary(df.compare$resp, df.compare$prediction.m2pl, df.compare$prediction.cdm.map))
+      imv.2 <- c(imv::imv.binary(df.compare$resp, df.compare$prediction.m2pl, df.compare$prediction.cdm.mp))
+      imv.3 <- c(imv::imv.binary(df.compare$resp, df.compare$prediction.irt, df.compare$prediction.m2pl))
+      
+      list.imv.1 <- c(list.imv.1, imv.1) 
+      list.imv.2 <- c(list.imv.2, imv.2) 
+      list.imv.3 <- c(list.imv.3, imv.3) 
+      
+    }
+  }
+  
+  return(c(
+    mean(unlist(list.imv.1)), sd(unlist(list.imv.1)),
+    mean(unlist(list.imv.2)), sd(unlist(list.imv.2)),
+    mean(unlist(list.imv.3)), sd(unlist(list.imv.3))
+  ))
+}
+
+```
+
+
 
 # Empirical analysis
 
 ## Organize all data
-```{r}
-empirical_q_data
-```
 
 ```{r}
-func.run.empirical.data <- function(q_data, cdm_model = "DINA", irt_model = "2PL", cdm_pr_estimate = cdm.pr.marg.update) {
+func.run.empirical.data <- function(q_data, cdm_model = "DINA", irt_model = "2PL", cdm_pr_estimate = cdm.pr.marg.update, is_m2pl = FALSE) {
   # Initialize empty lists to store results
   all_results <- list()
   oos_results <- list()
@@ -322,11 +500,17 @@ func.run.empirical.data <- function(q_data, cdm_model = "DINA", irt_model = "2PL
       }
       
       # Run the first type of analysis once
-      object_1_results <- func.run.analysis.kfold(df, cdm_model, irt_model, FALSE, 5, cdm_pr_estimate)
-      
-      # Run the second type of analysis multiple times
-      object_2_results <- func.run.analysis.kfold(df, cdm_model, irt_model, TRUE, 5, cdm_pr_estimate)
-    
+      if(is_m2pl){
+         # Run the first type of analysis once
+        object_1_results <- func.run.analysis.kfold.m2pl(df, cdm_model, irt_model, FALSE, 5, cdm_pr_estimate)
+        # Run the second type of analysis multiple times
+        object_2_results <- func.run.analysis.kfold.m2pl(df, cdm_model, irt_model, TRUE, 5, cdm_pr_estimate)
+      } else{
+         # Run the first type of analysis once
+        object_1_results <- func.run.analysis.kfold(df, cdm_model, irt_model, FALSE, 5, cdm_pr_estimate)
+        # Run the second type of analysis multiple times
+        object_2_results <- func.run.analysis.kfold(df, cdm_model, irt_model, TRUE, 5, cdm_pr_estimate)
+      }
       # Combine results for this object and store them in lists
       all_results <- rbind(all_results, object_1_results)
       oos_results <- rbind(oos_results, object_2_results)
@@ -438,6 +622,128 @@ q_data2 <- list(
 empirical_q_data <- append(q_data, q_data2)
 ```
 
+### new data in revision 
+Ma & Jiang 2021
+
+```{r}
+data(probability)
+pb <- probability[!is.na(probability$b201), sprintf("b2%.2i", 1:12)]
+Q1=sf1 <- read.table(header = TRUE, text = "
+                    item cp id pb un
+                    1  0  0  1  0
+                    2  1  0  0  0
+                    3  0  0  0  1
+                    4  0  1  0  0
+                    5  1  0  1  0
+                    6  1  0  1  0
+                    7  0  0  1  1
+                    8  0  0  1  1
+                    9  0  1  1  0
+                    10  1  1  0  0
+                    11  1  1  1  0
+                    12  0  1  1  1
+                    ")
+Q1=Q1[,-1]
+
+colnames(Q1) <- paste0("A", 1:4)
+colnames(pb) <- paste0("V", 1:12)
+
+pb_ready <- convert.fraction.data(pb, Q1)
+```
+
+Tang & Zhan 2021
+```{r}
+Zhan_T1 <- read_csv("../data/zhan_t1/Zhan_T1.csv")
+
+Zhan_T1_Q <- read.table("../data/zhan_t1/Q.txt")
+
+
+colnames(Zhan_T1_Q) <- paste0("V", 1:6)
+
+rational_number_ready <- convert.fraction.data(Zhan_T1, Zhan_T1_Q)
+```
+
+```{r}
+q_data3 <- list(
+  prob_knowledge = pb_ready, 
+  rational_number = rational_number_ready
+)
+
+empirical_q_data_new <- append(append(q_data, q_data2), q_data3)
+```
+
+## Arribute correlations report 
+```{r}
+
+get_cdm_corr_summary <- function(df_long, Q_matrix, dataset_name = "Dataset", model = "DINA") {
+  df_wide <- df_long %>%
+    dplyr::select(-gr) %>%
+    dplyr::arrange(item) %>%
+    tidyr::pivot_wider(names_from = item, values_from = resp) %>%
+    dplyr::arrange(id)
+  
+  df_no_id <- df_wide %>% dplyr::select(-id)
+  
+  mod <- GDINA(df_no_id, Q_matrix, model = model, mono.constraint = TRUE)
+  att_post <- personparm(mod, what = "EAP")
+  att_post <- att_post[, !colnames(att_post) %in% "multimodes"]
+  
+  att_cor <- cor(att_post)
+  cor_values <- att_cor[upper.tri(att_cor)]
+  cor_values <- cor_values[!is.na(cor_values)]
+  
+  median_cor <- median(cor_values)
+  Q1 <- quantile(cor_values, 0.25)
+  Q3 <- quantile(cor_values, 0.75)
+  IQR_cor <- IQR(cor_values)
+  
+  tibble(
+    median = median_cor,
+    Q1 = Q1,
+    Q3 = Q3,
+    IQR = IQR_cor
+  )
+}
+
+exclude_prefixes <- c("cdm_timss", "cdm_pisa0", "hmcdm_spa", "cdm_hr")
+
+summary_table_attribute_cor <- map_dfr(names(empirical_q_data_new), function(dataset_name) {
+  if (substring(dataset_name, 1, 9) %in% exclude_prefixes) return(NULL)
+  
+  dat <- if (is.data.frame(empirical_q_data_new[[dataset_name]])) {
+    empirical_q_data_new[[dataset_name]]
+  } else {
+    empirical_q_data_new[[dataset_name]]$to_data_frame()
+  }
+  
+  cdm_struct <- func.convert.Q.data.structure.with.k.fold(dat, kfold = 0)
+  
+  dina_res  <- get_cdm_corr_summary(cdm_struct$dat_kfold, cdm_struct$Q,
+                                    dataset_name = dataset_name, model = "DINA")
+  gdina_res <- get_cdm_corr_summary(cdm_struct$dat_kfold, cdm_struct$Q,
+                                    dataset_name = dataset_name, model = "GDINA")
+  
+  tibble(
+    dataset = dataset_name,
+    median_DINA = dina_res$median,
+    Q1_DINA     = dina_res$Q1,
+    Q3_DINA     = dina_res$Q3,
+    IQR_DINA    = dina_res$IQR,
+    median_GDINA = gdina_res$median,
+    Q1_GDINA     = gdina_res$Q1,
+    Q3_GDINA     = gdina_res$Q3,
+    IQR_GDINA    = gdina_res$IQR
+  )
+})
+
+summary_table_attribute_cor <- summary_table_attribute_cor %>% arrange(dataset)
+
+```
+```{r}
+#write_csv(summary_table_attribute_cor, "../empirical_output/empirical_data_attribute_correlation.csv")
+```
+
+
 
 ## sanity check 
 
@@ -452,14 +758,6 @@ df_frac20_clean <- df_frac20 %>% mutate(item = as.integer(substring(item, 6)))
 df_frac20_cdm_structure <- func.convert.Q.data.structure.with.k.fold(df_frac20_clean, 0)
 ```
 
-get from gdina
-```{r}
-df_frac20_cdm_structure_gdina <- GDINA::frac20
-```
-
-```{r}
-all(df_frac20_cdm_structure$Q == df_frac20_cdm_structure_gdina$Q)
-```
 
 
 ### Q2: check if frac20 cdm prediction makes sense?
@@ -472,6 +770,16 @@ func.run.analysis.kfold(df_frac20, "GDINA", "2PL", FALSE, 5, cdm.pr.marg.update)
 func.run.analysis.kfold(df_frac20, "DINA", "2PL", TRUE, 5, cdm.pr.marg.update)
 ```
 
+```{r}
+func.run.analysis.kfold.m2pl(df_frac20, "DINA", "2PL", TRUE, 5, cdm.pr.marg.update)
+```
+
+```{r}
+func.run.analysis.kfold.m2pl(df_frac20, "DINA", "2PL", FALSE, 5, cdm.pr.marg.update)
+```
+```{r}
+func.run.analysis.kfold.m2pl(df_frac20, "DINA", "2PL", TRUE, 5, cdm.pr.marg.update)
+```
 
 ### Q3: check identifiability of all data 
 ```{r}
@@ -497,8 +805,101 @@ for (obj_name in names(q_data2)) {
 }
   
 ```
+### Q4: cdm deep dive
+frac20 data 
+```{r}
+df <- GDINA::realdata_Tatsuoka1990$dat
+Q <- GDINA::realdata_Tatsuoka1990$Q
+
+#### GDINA estimation
+gest <- GDINA(df,Q,mono.constraint = TRUE,control = list(nstarts=200))
+### Q-matrix validation
+qv <- Qval(gest,method = "wald")
+qv
+#### Fit GDINA with validated Q
+gest2 <- GDINA(df,qv$sug.Q,mono.constraint = TRUE,control = list(nstarts=200))
+
+#### find reduce models
+y <- modelcomp(gest2,method = "Wald")
+y
+
+#######fit the reduced models using the validated Q
+rest2 <- GDINA(df,qv$sug.Q,model=y$selected.model$models,mono.constraint = TRUE,control = list(nstarts=200))
+
+##### compare different models
+anova(gest,gest2,rest2)
+```
+
+```{r}
+df_1 <- convert.fraction.data(df, Q)
+func.run.analysis.kfold(df_1, "GDINA", "2PL", TRUE, 5, cdm.pr.marg.update)
+```
+```{r}
+df_1 <- convert.fraction.data(df, Q)
+func.run.analysis.kfold(df_1, "GDINA", "2PL", FALSE, 5, cdm.pr.marg.update)
+```
+
+```{r}
+df_2 <- convert.fraction.data(df, qv$sug.Q)
+func.run.analysis.kfold(df_2, "GDINA", "2PL", TRUE, 5, cdm.pr.marg.update)
+```
+```{r}
+func.run.analysis.kfold(df_2, "GDINA", "2PL", FALSE, 5, cdm.pr.marg.update)
+```
+
+```{r}
+df_2 <- convert.fraction.data(df, qv$sug.Q)
+func.run.analysis.kfold(df_2, y$selected.model$models, "2PL", TRUE, 5, cdm.pr.marg.update)
+```
+```{r}
+func.run.analysis.kfold(df_2, y$selected.model$models, "2PL", FALSE, 5, cdm.pr.marg.update)
+```
+Tang & Zhan 2021
+
+```{r}
+rational_number_ready <- convert.fraction.data(Zhan_T1, Zhan_T1_Q)
+```
+
+
+
+```{r}
+df <- Zhan_T1
+Q <- Zhan_T1_Q
+#### GDINA estimation
+gest <- GDINA(df,Q,mono.constraint = TRUE,control = list(nstarts=200))
+### Q-matrix validation
+qv <- Qval(gest,method = "PVAF")
+#### Fit GDINA with validated Q
+gest2 <- GDINA(df,qv$sug.Q,mono.constraint = TRUE,control = list(nstarts=200))
+
+#### find reduce models
+y <- modelcomp(gest2,method = "Wald")
+
+#######fit the reduced models using the validated Q
+rest2 <- GDINA(df,qv$sug.Q,model=y$selected.model$models,mono.constraint = TRUE,control = list(nstarts=200))
+
+##### compare different models
+anova(gest,gest2,rest2)
+```
+```{r}
+df_1 <- convert.fraction.data(df, Q)
+func.run.analysis.kfold(df_1, "GDINA", "2PL", FALSE, 5, cdm.pr.marg.update)
+func.run.analysis.kfold(df_1, "GDINA", "2PL", TRUE, 5, cdm.pr.marg.update)
+```
+```{r}
+df_2 <- convert.fraction.data(df, qv$sug.Q)
+func.run.analysis.kfold(df_2, "GDINA", "2PL", FALSE, 5, cdm.pr.marg.update)
+func.run.analysis.kfold(df_2, "GDINA", "2PL", TRUE, 5, cdm.pr.marg.update)
+```
+
+```{r}
+df_2 <- convert.fraction.data(df, qv$sug.Q)
+func.run.analysis.kfold(df_2, y$selected.model$models, "2PL", FALSE, 5, cdm.pr.marg.update)
+func.run.analysis.kfold(df_2, y$selected.model$models, "2PL", TRUE, 5, cdm.pr.marg.update)
+```
 
 ## Run all data
+IMV(2PL, CDM)
 ```{r}
 set.seed(10)
 df.imv.compare.1 <- func.run.empirical.data(empirical_q_data, cdm_model = "DINA", irt_model = "2PL")
@@ -506,6 +907,19 @@ df.imv.compare.1 <- func.run.empirical.data(empirical_q_data, cdm_model = "DINA"
 
 ```{r}
 df.imv.compare.2 <- func.run.empirical.data(empirical_q_data, cdm_model = "GDINA", irt_model = "2PL")
+```
+
+```{r}
+df.imv.compare.1.extra <- func.run.empirical.data(q_data3, cdm_model = "DINA", irt_model = "2PL")
+```
+```{r}
+df.imv.compare.2.extra <- func.run.empirical.data(q_data3, cdm_model = "GDINA", irt_model = "2PL")
+```
+
+IMV(M2PL, CDM)
+```{r}
+set.seed(10)
+df.imv.compare.1.m2pl <- func.run.empirical.data(empirical_q_data_new, cdm_model = "DINA", irt_model = "2PL", is_m2pl =TRUE)
 ```
 
 ## Analysis
@@ -518,14 +932,35 @@ df.imv.compare.combined.raw <- df.imv.compare.1 %>%
 #write_csv(df.imv.compare.combined.raw, "../empirical_output/empirical_output_imv_raw.csv")
 ```
 
+```{r}
+df.imv.compare.combined.raw <- read_csv("../empirical_output/empirical_output_imv_raw.csv")
+```
+
+```{r}
+df.imv.compare.combined.raw.extra <- df.imv.compare.1.extra %>% 
+  mutate(cdm_model = "DINA") %>% 
+  rbind(df.imv.compare.2.extra %>% mutate(cdm_model = "GDINA")) %>%
+  relocate(dataname, cdm_model, sample_method)
+```
+
+```{r}
+df.imv.compare.combined.revision <- df.imv.compare.combined.raw %>%
+  rbind(df.imv.compare.combined.raw.extra)
+
+#write_csv(df.imv.compare.combined.revision, "../empirical_output/empirical_output_imv_raw_revision.csv")
+```
+
 ### IMV(MAP, mp)
 ```{r}
-df.imv.estimator <- df.imv.compare.combined.raw %>% 
+df.imv.estimator <- df.imv.compare.combined.revision %>% 
   dplyr :: select(-c(mean_imv_1, mean_imv_2, sd_imv_1, sd_imv_2)) %>% 
   pivot_wider(names_from = sample_method, values_from = c(mean_imv_3,sd_imv_3) ) %>% 
   arrange(dataname, cdm_model) %>% 
   relocate(dataname, cdm_model) %>% 
   dplyr ::select(-sd_imv_3_all) 
+```
+```{r}
+df.imv.estimator 
 ```
 
 ```{r}
@@ -563,7 +998,7 @@ cat(table_latex)
 ### IMV(2PL, CDM)
 
 ```{r}
-df.imv.compare.combined <- df.imv.compare.combined.raw %>% 
+df.imv.compare.combined <- df.imv.compare.combined.revision %>% 
   dplyr :: select(-c(mean_imv_3, sd_imv_3)) %>% 
   pivot_longer(cols = c(mean_imv_1, sd_imv_1, mean_imv_2, sd_imv_2)) %>% 
   filter(!is.na(value)) %>% 
@@ -576,11 +1011,16 @@ df.imv.compare.combined <- df.imv.compare.combined.raw %>%
 #write_csv(df.imv.compare.combined, "../empirical_output/empirical_output_imv_irt_cdm.csv")
 ```
 
+```{r}
+#df.imv.compare.combined <- read_csv("../empirical_output/empirical_output_imv_irt_cdm.csv")
+```
+
 ```{r height = 8}
 df_long <- df.imv.compare.combined %>%
   pivot_longer(cols = c(mean_all, mean_kfold),
                names_to = "method",
-               values_to = "mean_imv")
+               values_to = "mean_imv") %>% 
+  mutate(cdm_model = ifelse(cdm_model == "GDINA", "G-DINA",cdm_model))
 
 df_long_modified <- df_long %>% 
   mutate(method = ifelse(method == "mean_all", "in-sample", "out-of-sample fold")) %>% 
@@ -618,9 +1058,13 @@ ggplot(df_long_modified, aes(x = dataname, y = mean_imv, fill = Method)) +
     strip.text = element_text(s = 15),
     legend.text = element_text(s = 15),
   ) +
-  scale_x_discrete(expand = expansion(mult = c(0.1, 0.1))) + coord_cartesian(ylim = c(-0.05, 0.05))
+  scale_x_discrete(expand = expansion(mult = c(0.1, 0.1))) + coord_cartesian(ylim = c(-0.05, 0.05)) + 
+  scale_fill_manual(values = c(
+  "in-sample" = "#0072B2",  # blue
+  "out-of-sample fold" = "#E69F00"
+))
 
-ggsave("../plots_update/empirical_analysis.pdf", width = 8, height = 6)
+ggsave("../plots_update/empirical_analysis_revision.pdf", width = 10, height = 6)
 ```
 
 
@@ -651,6 +1095,69 @@ ggplot(df_long_modified %>% filter(dataname == "frac20"), aes(x = dataname, y = 
   scale_x_discrete(expand = expansion(mult = c(0.05, 0.05))) + coord_cartesian(ylim = c(-0.05, 0.05))
 ```
 
+### IMV(2PL, M2PL) and IMV(M2PL, CDM)
+```{r}
+
+#write_csv(df.imv.compare.1.m2pl, "../empirical_output/empirical_output_imv_m2pl_raw_dina.csv")
+```
+
+```{r}
+df_long_m2pl <- df.imv.compare.1.m2pl %>% 
+  dplyr :: select(-c(mean_imv_2, sd_imv_2)) %>% 
+  pivot_longer(cols = c(mean_imv_1, sd_imv_1, mean_imv_3, sd_imv_3)) %>% 
+  filter(!is.na(value)) %>% 
+  mutate(estimate_method = ifelse(str_sub(name, -1) == "1", "IMV(M2PL, CDM)", "IMV(2PL, M2PL)")) %>% 
+  mutate(name = ifelse(substring(name, 1, 2) == "sd", "sd", "mean")) %>% 
+   pivot_wider(names_from = c(name, sample_method), values_from = value ) %>% 
+  arrange(dataname, estimate_method) %>% 
+  relocate(dataname,estimate_method) %>% 
+  pivot_longer(cols = c(mean_all, mean_kfold),
+               names_to = "method",
+               values_to = "mean_imv") %>% 
+  filter(!dataname %in% c("roar_pa", "timss_2011"))
+
+df_long_modified_m2pl <- df_long_m2pl %>% 
+  mutate(method = ifelse(method == "mean_all", "in-sample", "out-of-sample fold")) %>% 
+  rename(Method = method) 
+
+
+df_error_m2pl <- df_long_modified_m2pl %>%
+  mutate(sd = ifelse(Method == "out-of-sample fold", df.imv.compare.combined$sd_kfold, 0))
+
+df_error_update_m2pl <- df_error_m2pl %>% 
+  mutate(sd = ifelse(Method == "in-sample", NA, sd))
+
+ggplot(df_long_modified_m2pl, aes(x = dataname, y = mean_imv, fill = Method)) +
+  geom_bar(stat = "identity", width = 0.8, position = position_dodge(width = 0.8)) +
+  geom_errorbar(
+    data = df_error_update_m2pl,
+    aes(ymin = mean_imv - (sd / sqrt(5)), ymax = mean_imv + (sd / sqrt(5)), x = dataname),
+    width = 0.5,
+    position = position_dodge(width = 0.8)
+  ) + 
+  geom_hline(yintercept = 0, linetype = "solid", size = 0.5, color = "black") +  # Emphasized y = 0 line
+   facet_grid(~estimate_method) +
+  labs(x = "Dataset", y = "IMV") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom",
+    panel.spacing = unit(1.5, "lines"), # Wider space between panels
+    axis.title = element_text(s = 15),
+    legend.title = element_text(s = 15),
+    axis.text = element_text(s = 12),
+    strip.text = element_text(s = 15),
+    legend.text = element_text(s = 15),
+  ) +
+  scale_x_discrete(expand = expansion(mult = c(0.1, 0.1))) + coord_cartesian(ylim = c(-0.05, 0.05)) + 
+  scale_fill_manual(values = c(
+  "in-sample" = "#0072B2",  # blue
+  "out-of-sample fold" = "#E69F00"
+))
+
+
+ggsave("../plots_update/empirical_analysis_M2PL.pdf", width = 10, height = 5)
+```
 ## Check properties of ED
 ```{r}
 obj_names <- c()
